@@ -33,7 +33,7 @@ type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
 
-const storageKey = "crosstrain-admin-snapshot-v3";
+const storageKey = "crosstrain-admin-snapshot-v4";
 const moduleAccess = ["Members", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -111,6 +111,12 @@ function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSna
     ...saved,
     membershipPlans: saved.membershipPlans ?? initialSnapshot.membershipPlans,
     branches: saved.branches ?? initialSnapshot.branches,
+    staff: (saved.staff ?? initialSnapshot.staff).map((staff) => ({
+      ...staff,
+      branch: staff.branch ?? "Delhi Branch",
+      disciplines: staff.disciplines ?? [staff.role],
+      bio: staff.bio ?? staff.performance,
+    })),
     classes: (saved.classes ?? initialSnapshot.classes).map((slot) => ({
       ...slot,
       day: slot.day ?? "Monday",
@@ -327,9 +333,12 @@ export default function AdminPanel({
       id: createId("STF", snapshot.staff.length),
       name,
       role: String(formData.get("role") ?? "Trainer") as StaffMember["role"],
+      branch: "Delhi Branch",
+      disciplines: [String(formData.get("role") ?? "Trainer")],
       access: staffForm.access,
       attendance: 100,
       performance: "New staff profile",
+      bio: "New team member profile",
     };
     updateSnapshot((current) => ({ ...current, staff: [staff, ...current.staff] }), "Staff account created");
     setStaffForm({ ...staffForm, name: "" });
@@ -758,9 +767,17 @@ export default function AdminPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-bold">{staff.name}</p>
-                <p className="text-sm text-slate-500">{staff.role}</p>
+                <p className="text-sm text-slate-500">{staff.role} · {staff.branch}</p>
               </div>
               <p className="text-sm font-black text-emerald-700">{staff.attendance}%</p>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{staff.bio}</p>
+            <div className="mt-3 flex flex-wrap gap-1">
+              {staff.disciplines.map((discipline) => (
+                <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800" key={discipline}>
+                  {discipline}
+                </span>
+              ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-1">
               {moduleAccess.map((access) => (
@@ -967,6 +984,8 @@ export default function AdminPanel({
               <div>
                 <p className="font-black">{branch.name}</p>
                 <p className="mt-1 text-sm text-slate-500">{branch.area}, {branch.city}</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{branch.address}</p>
+                <p className="mt-1 text-xs font-bold text-slate-700">{branch.phone}</p>
               </div>
               <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800">{branch.status}</span>
             </div>

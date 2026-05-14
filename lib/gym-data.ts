@@ -29,9 +29,12 @@ export type StaffMember = {
   id: string;
   name: string;
   role: StaffRole;
+  branch: string;
+  disciplines: string[];
   access: string[];
   attendance: number;
   performance: string;
+  bio: string;
 };
 
 export type ClassSlot = {
@@ -56,6 +59,9 @@ export type Branch = {
   name: string;
   area: string;
   city: string;
+  address: string;
+  phone: string;
+  email: string;
   status: "active" | "launching";
 };
 
@@ -146,7 +152,7 @@ const dashboardSeed: DashboardSnapshot = {
       expiry: "18 Aug 2026",
       dues: 0,
       lastCheckIn: "Today, 7:18 AM",
-      trainer: "Nisha",
+      trainer: "Siddharth Singh",
     },
     {
       id: "MBR-1037",
@@ -157,7 +163,7 @@ const dashboardSeed: DashboardSnapshot = {
       expiry: "12 May 2026",
       dues: 12500,
       lastCheckIn: "Yesterday, 6:44 PM",
-      trainer: "Rahul",
+      trainer: "Tarun Yadav",
     },
     {
       id: "MBR-1019",
@@ -223,61 +229,97 @@ const dashboardSeed: DashboardSnapshot = {
     { id: "MEM-2DAY-12", category: "2 Days a Week", duration: "12 Month", price: 40000 },
   ],
   branches: [
-    { id: "BR-DEL", name: "Delhi Branch", area: "Saket", city: "Delhi", status: "active" },
-    { id: "BR-NOI-58", name: "Noida Sector 58 Branch", area: "Sector 58", city: "Noida", status: "active" },
-    { id: "BR-FBD-28", name: "Faridabad Sector 28 Branch", area: "Sector 28", city: "Faridabad", status: "active" },
+    {
+      id: "BR-DEL",
+      name: "Delhi Branch",
+      area: "Saket",
+      city: "Delhi",
+      address: "A-4, Anupam Garden, Sainik Farm, New Delhi, Delhi 110062",
+      phone: "+91 88269 14097",
+      email: "crosstrainfc@gmail.com",
+      status: "active",
+    },
+    {
+      id: "BR-NOI-58",
+      name: "Noida Sector 58 Branch",
+      area: "Sector 58",
+      city: "Noida",
+      address: "Sector 58, Noida",
+      phone: "+91 70673 75497",
+      email: "crosstrainfc@gmail.com",
+      status: "active",
+    },
+    {
+      id: "BR-FBD-28",
+      name: "Faridabad Sector 28 Branch",
+      area: "Sector 28",
+      city: "Faridabad",
+      address: "Sector 28, Faridabad",
+      phone: "+91 70673 75497",
+      email: "crosstrainfc@gmail.com",
+      status: "active",
+    },
   ],
   staff: [
     {
       id: "STF-01",
-      name: "Nisha Rao",
+      name: "Siddharth Singh",
       role: "Trainer",
+      branch: "Delhi Branch",
+      disciplines: ["MMA", "Brazilian Jiu-Jitsu", "Grappling", "Muay Thai"],
       access: ["Members", "PT", "Plans"],
       attendance: 96,
-      performance: "42 PT sessions",
+      performance: "Head coach and founder",
+      bio: "First Indian competitive black belt in Brazilian Jiu-Jitsu, Gold Mongkol Master in Muay Thai, and founder of Crosstrain Fight Club.",
     },
     {
       id: "STF-02",
-      name: "Rahul Mehta",
-      role: "Manager",
-      access: ["Billing", "Staff", "Reports"],
+      name: "Tarun Yadav",
+      role: "Trainer",
+      branch: "Delhi Branch",
+      disciplines: ["Brazilian Jiu-Jitsu", "Gi", "No-Gi", "Grappling"],
+      access: ["Members", "PT", "Classes", "Plans"],
       attendance: 91,
-      performance: "18 renewals",
+      performance: "Eight-time national BJJ champion",
+      bio: "BJJ specialist, Asian Games 2022 competitor, brown belt, and senior grappling coach at the Saket academy.",
     },
     {
       id: "STF-03",
-      name: "Tara Singh",
-      role: "Front Desk",
-      access: ["QR", "Leads", "Classes"],
+      name: "Pawan Pratap",
+      role: "Trainer",
+      branch: "Faridabad Sector 28 Branch",
+      disciplines: ["MMA", "Fitness", "Wrestling", "Striking"],
+      access: ["Members", "PT", "Classes"],
       attendance: 98,
-      performance: "64 check-ins",
+      performance: "National-level MMA athlete",
+      bio: "MMA and fitness coach for the Faridabad branch, focused on wrestling, striking, functional strength, and beginner-to-competitor development.",
     },
   ],
   classes: [
-    { id: "CLS-MON-01", day: "Monday", name: "Jiu Jitsu", coach: "Saket HQ", time: "8:00 AM", booked: 18, capacity: 24 },
-    { id: "CLS-MON-02", day: "Monday", name: "Kids Class BJJ", coach: "Saket HQ", time: "4:30 PM", booked: 16, capacity: 20 },
-    { id: "CLS-MON-03", day: "Monday", name: "Wrestling", coach: "Saket HQ", time: "5:30 PM", booked: 20, capacity: 24 },
-    { id: "CLS-MON-04", day: "Monday", name: "Jiu Jitsu (Gi)", coach: "Saket HQ", time: "7:00 PM", booked: 19, capacity: 24 },
+    { id: "CLS-MON-01", day: "Monday", name: "Jiu Jitsu", coach: "Tarun Yadav", time: "8:00 AM", booked: 18, capacity: 24 },
+    { id: "CLS-MON-02", day: "Monday", name: "Kids Class BJJ", coach: "Tarun Yadav", time: "4:30 PM", booked: 16, capacity: 20 },
+    { id: "CLS-MON-03", day: "Monday", name: "Wrestling", coach: "Pawan Pratap", time: "5:30 PM", booked: 20, capacity: 24 },
+    { id: "CLS-MON-04", day: "Monday", name: "Jiu Jitsu (Gi)", coach: "Tarun Yadav", time: "7:00 PM", booked: 19, capacity: 24 },
     { id: "CLS-MON-05", day: "Monday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 22, capacity: 30 },
-    { id: "CLS-TUE-01", day: "Tuesday", name: "Muay Thai", coach: "Saket HQ", time: "8:00 AM", booked: 21, capacity: 24 },
-    { id: "CLS-TUE-02", day: "Tuesday", name: "MMA Fundamentals", coach: "Saket HQ", time: "5:30 PM", booked: 23, capacity: 26 },
-    { id: "CLS-TUE-03", day: "Tuesday", name: "BJJ Fundamentals", coach: "Saket HQ", time: "7:00 PM", booked: 20, capacity: 24 },
+    { id: "CLS-TUE-01", day: "Tuesday", name: "Muay Thai", coach: "Siddharth Singh", time: "8:00 AM", booked: 21, capacity: 24 },
+    { id: "CLS-TUE-02", day: "Tuesday", name: "MMA Fundamentals", coach: "Siddharth Singh", time: "5:30 PM", booked: 23, capacity: 26 },
+    { id: "CLS-TUE-03", day: "Tuesday", name: "BJJ Fundamentals", coach: "Tarun Yadav", time: "7:00 PM", booked: 20, capacity: 24 },
     { id: "CLS-TUE-04", day: "Tuesday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 24, capacity: 30 },
-    { id: "CLS-WED-01", day: "Wednesday", name: "MMA Pro Invite Only", coach: "Saket HQ", time: "11:00 AM", booked: 10, capacity: 12 },
-    { id: "CLS-WED-02", day: "Wednesday", name: "Kids Class BJJ", coach: "Saket HQ", time: "4:30 PM", booked: 15, capacity: 20 },
-    { id: "CLS-WED-03", day: "Wednesday", name: "Wrestling", coach: "Saket HQ", time: "5:30 PM", booked: 21, capacity: 24 },
-    { id: "CLS-WED-04", day: "Wednesday", name: "Muay Thai", coach: "Saket HQ", time: "7:00 PM", booked: 24, capacity: 26 },
+    { id: "CLS-WED-01", day: "Wednesday", name: "MMA Pro Invite Only", coach: "Siddharth Singh", time: "11:00 AM", booked: 10, capacity: 12 },
+    { id: "CLS-WED-02", day: "Wednesday", name: "Kids Class BJJ", coach: "Tarun Yadav", time: "4:30 PM", booked: 15, capacity: 20 },
+    { id: "CLS-WED-03", day: "Wednesday", name: "Wrestling", coach: "Pawan Pratap", time: "5:30 PM", booked: 21, capacity: 24 },
+    { id: "CLS-WED-04", day: "Wednesday", name: "Muay Thai", coach: "Siddharth Singh", time: "7:00 PM", booked: 24, capacity: 26 },
     { id: "CLS-WED-05", day: "Wednesday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 22, capacity: 30 },
-    { id: "CLS-THU-01", day: "Thursday", name: "MMA Fundamentals", coach: "Saket HQ", time: "8:00 AM", booked: 20, capacity: 24 },
-    { id: "CLS-THU-02", day: "Thursday", name: "MMA Fundamentals", coach: "Saket HQ", time: "5:30 PM", booked: 23, capacity: 26 },
-    { id: "CLS-THU-03", day: "Thursday", name: "Jiu Jitsu", coach: "Saket HQ", time: "7:00 PM", booked: 18, capacity: 24 },
+    { id: "CLS-THU-01", day: "Thursday", name: "MMA Fundamentals", coach: "Siddharth Singh", time: "8:00 AM", booked: 20, capacity: 24 },
+    { id: "CLS-THU-02", day: "Thursday", name: "MMA Fundamentals", coach: "Siddharth Singh", time: "5:30 PM", booked: 23, capacity: 26 },
+    { id: "CLS-THU-03", day: "Thursday", name: "Jiu Jitsu", coach: "Tarun Yadav", time: "7:00 PM", booked: 18, capacity: 24 },
     { id: "CLS-THU-04", day: "Thursday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 24, capacity: 30 },
-    { id: "CLS-FRI-01", day: "Friday", name: "Wrestling", coach: "Saket HQ", time: "8:00 AM", booked: 18, capacity: 24 },
-    { id: "CLS-FRI-02", day: "Friday", name: "Kids Class BJJ", coach: "Saket HQ", time: "4:30 PM", booked: 17, capacity: 20 },
-    { id: "CLS-FRI-03", day: "Friday", name: "BJJ Fundamentals", coach: "Saket HQ", time: "5:30 PM", booked: 22, capacity: 24 },
-    { id: "CLS-FRI-04", day: "Friday", name: "Muay Thai", coach: "Saket HQ", time: "7:00 PM", booked: 24, capacity: 26 },
+    { id: "CLS-FRI-01", day: "Friday", name: "Wrestling", coach: "Pawan Pratap", time: "8:00 AM", booked: 18, capacity: 24 },
+    { id: "CLS-FRI-02", day: "Friday", name: "Kids Class BJJ", coach: "Tarun Yadav", time: "4:30 PM", booked: 17, capacity: 20 },
+    { id: "CLS-FRI-03", day: "Friday", name: "BJJ Fundamentals", coach: "Tarun Yadav", time: "5:30 PM", booked: 22, capacity: 24 },
+    { id: "CLS-FRI-04", day: "Friday", name: "Muay Thai", coach: "Siddharth Singh", time: "7:00 PM", booked: 24, capacity: 26 },
     { id: "CLS-FRI-05", day: "Friday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 23, capacity: 30 },
-    { id: "CLS-SAT-01", day: "Saturday", name: "Jiu Jitsu", coach: "Saket HQ", time: "11:30 AM", booked: 19, capacity: 24 },
+    { id: "CLS-SAT-01", day: "Saturday", name: "Jiu Jitsu", coach: "Tarun Yadav", time: "11:30 AM", booked: 19, capacity: 24 },
     { id: "CLS-SUN-01", day: "Sunday", name: "Off", coach: "Saket HQ", time: "Closed", booked: 0, capacity: 1 },
   ],
   leads: [
@@ -291,9 +333,9 @@ const dashboardSeed: DashboardSnapshot = {
   ],
   ptPackages: [
     { id: "PT-TRY-01", member: "Walk-in Trial", trainer: "Available coach", sessionsLeft: 1, progress: 0 },
-    { id: "PT-771", member: "Aarav Sharma", trainer: "Nisha", sessionsLeft: 8, progress: 72 },
-    { id: "PT-763", member: "Meera Iyer", trainer: "Rahul", sessionsLeft: 3, progress: 58 },
-    { id: "PT-758", member: "Riya Menon", trainer: "Nisha", sessionsLeft: 12, progress: 34 },
+    { id: "PT-771", member: "Aarav Sharma", trainer: "Siddharth Singh", sessionsLeft: 8, progress: 72 },
+    { id: "PT-763", member: "Meera Iyer", trainer: "Tarun Yadav", sessionsLeft: 3, progress: 58 },
+    { id: "PT-758", member: "Riya Menon", trainer: "Pawan Pratap", sessionsLeft: 12, progress: 34 },
   ],
 };
 
