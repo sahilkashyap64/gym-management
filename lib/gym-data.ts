@@ -53,6 +53,7 @@ export type MembershipPlan = {
   category: "Regular" | "3 Days a Week" | "2 Days a Week";
   duration: string;
   price: number;
+  status: "active" | "archived";
 };
 
 export type Branch = {
@@ -221,17 +222,17 @@ const dashboardSeed: DashboardSnapshot = {
     },
   ],
   membershipPlans: [
-    { id: "MEM-REG-01", category: "Regular", duration: "1 Month", price: 10000 },
-    { id: "MEM-REG-03", category: "Regular", duration: "3 Month", price: 20000 },
-    { id: "MEM-REG-06", category: "Regular", duration: "6 Month", price: 35000 },
-    { id: "MEM-REG-12", category: "Regular", duration: "12 Month", price: 60000 },
-    { id: "MEM-3DAY-01", category: "3 Days a Week", duration: "1 Month", price: 8000 },
-    { id: "MEM-3DAY-03", category: "3 Days a Week", duration: "3 Month", price: 16000 },
-    { id: "MEM-3DAY-06", category: "3 Days a Week", duration: "6 Month", price: 30000 },
-    { id: "MEM-3DAY-12", category: "3 Days a Week", duration: "12 Month", price: 48000 },
-    { id: "MEM-2DAY-03", category: "2 Days a Week", duration: "3 Month", price: 14000 },
-    { id: "MEM-2DAY-06", category: "2 Days a Week", duration: "6 Month", price: 25000 },
-    { id: "MEM-2DAY-12", category: "2 Days a Week", duration: "12 Month", price: 40000 },
+    { id: "MEM-REG-01", category: "Regular", duration: "1 Month", price: 10000, status: "active" },
+    { id: "MEM-REG-03", category: "Regular", duration: "3 Month", price: 20000, status: "active" },
+    { id: "MEM-REG-06", category: "Regular", duration: "6 Month", price: 35000, status: "active" },
+    { id: "MEM-REG-12", category: "Regular", duration: "12 Month", price: 60000, status: "active" },
+    { id: "MEM-3DAY-01", category: "3 Days a Week", duration: "1 Month", price: 8000, status: "active" },
+    { id: "MEM-3DAY-03", category: "3 Days a Week", duration: "3 Month", price: 16000, status: "active" },
+    { id: "MEM-3DAY-06", category: "3 Days a Week", duration: "6 Month", price: 30000, status: "active" },
+    { id: "MEM-3DAY-12", category: "3 Days a Week", duration: "12 Month", price: 48000, status: "active" },
+    { id: "MEM-2DAY-03", category: "2 Days a Week", duration: "3 Month", price: 14000, status: "active" },
+    { id: "MEM-2DAY-06", category: "2 Days a Week", duration: "6 Month", price: 25000, status: "active" },
+    { id: "MEM-2DAY-12", category: "2 Days a Week", duration: "12 Month", price: 40000, status: "active" },
   ],
   branches: [
     {

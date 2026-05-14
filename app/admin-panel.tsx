@@ -18,6 +18,7 @@ import type {
 export type AdminModule =
   | "overview"
   | "members"
+  | "membership"
   | "billing"
   | "payments"
   | "pt"
@@ -32,10 +33,10 @@ type PtPackage = DashboardSnapshot["ptPackages"][number];
 type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
-type ActiveModal = "member" | "staff" | null;
+type ActiveModal = "member" | "staff" | "membership" | null;
 
-const storageKey = "crosstrain-admin-snapshot-v6";
-const moduleAccess = ["Members", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
+const storageKey = "crosstrain-admin-snapshot-v7";
+const moduleAccess = ["Members", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const membershipCategories: MembershipPlan["category"][] = ["Regular", "3 Days a Week", "2 Days a Week"];
@@ -43,6 +44,7 @@ const membershipCategories: MembershipPlan["category"][] = ["Regular", "3 Days a
 const routes: Array<{ key: AdminModule; label: string; href: string }> = [
   { key: "overview", label: "Overview", href: "/" },
   { key: "members", label: "Members", href: "/members" },
+  { key: "membership", label: "Membership", href: "/membership" },
   { key: "billing", label: "Billing", href: "/billing" },
   { key: "payments", label: "Payments", href: "/payments" },
   { key: "pt", label: "PT", href: "/pt" },
@@ -50,7 +52,7 @@ const routes: Array<{ key: AdminModule; label: string; href: string }> = [
   { key: "reports", label: "Reports", href: "/reports" },
   { key: "classes", label: "Classes", href: "/classes" },
   { key: "leads", label: "Leads", href: "/leads" },
-  { key: "plans", label: "Plans", href: "/plans" },
+  { key: "plans", label: "Diet Plans", href: "/plans" },
   { key: "qr-attendance", label: "QR Attendance", href: "/qr-attendance" },
 ];
 
@@ -76,6 +78,10 @@ function formatCurrency(value: number) {
 
 function createId(prefix: string, count: number) {
   return `${prefix}-${String(count + 1).padStart(4, "0")}`;
+}
+
+function membershipPlanLabel(plan: MembershipPlan) {
+  return `${plan.category} ${plan.duration}`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -177,7 +183,10 @@ function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSna
     trainer: trainerNames.has(member.trainer) ? member.trainer : "Unassigned",
   }));
   const invoices = Array.isArray(saved.invoices) ? saved.invoices : initialSnapshot.invoices;
-  const membershipPlans = Array.isArray(saved.membershipPlans) ? saved.membershipPlans : initialSnapshot.membershipPlans;
+  const membershipPlans = (Array.isArray(saved.membershipPlans) ? saved.membershipPlans : initialSnapshot.membershipPlans).map((plan) => ({
+    ...plan,
+    status: plan.status ?? "active",
+  }));
   const branches = Array.isArray(saved.branches) ? saved.branches : initialSnapshot.branches;
   const staff = Array.isArray(saved.staff) ? saved.staff : initialSnapshot.staff;
   const classes = Array.isArray(saved.classes) ? saved.classes : initialSnapshot.classes;
@@ -225,7 +234,7 @@ export default function AdminPanel({
     name: "",
     phone: "",
     branch: "Delhi Branch",
-    plan: "Monthly Access",
+    plan: "Regular 1 Month",
     status: "active" as MemberStatus,
     expiry: "30 Jun 2026",
     trainer: "Unassigned",
@@ -254,6 +263,12 @@ export default function AdminPanel({
     source: "Walk-in",
     nextFollowUp: "Tomorrow",
   });
+  const [membershipForm, setMembershipForm] = useState({
+    category: "Regular" as MembershipPlan["category"],
+    duration: "1 Month",
+    price: "10000",
+  });
+  const [editingMembershipId, setEditingMembershipId] = useState<string | null>(null);
   const [planForm, setPlanForm] = useState({
     member: initialSnapshot.members[0]?.name ?? "",
     calories: "2200",
@@ -291,6 +306,7 @@ export default function AdminPanel({
 
   const branchOptions = useMemo(() => snapshot.branches.map((branch) => branch.name), [snapshot.branches]);
   const trainerOptions = useMemo(() => snapshot.staff.filter((staff) => staff.role === "Trainer").map((staff) => staff.name), [snapshot.staff]);
+  const activeMembershipPlans = useMemo(() => snapshot.membershipPlans.filter((plan) => plan.status === "active"), [snapshot.membershipPlans]);
   const pageTitle = routes.find((route) => route.key === module)?.label ?? "Overview";
 
   function flash(message: string) {
@@ -330,6 +346,30 @@ export default function AdminPanel({
     setActiveModal(null);
   }
 
+  function submitMembershipModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const price = Number(formData.get("price") ?? 0);
+    if (!price) return;
+    if (editingMembershipId) {
+      updateMembershipPlan(editingMembershipId, formData);
+    } else {
+      addMembershipPlan(formData);
+    }
+    setActiveModal(null);
+    setEditingMembershipId(null);
+  }
+
+  function openMembershipModal(plan?: MembershipPlan) {
+    setEditingMembershipId(plan?.id ?? null);
+    setMembershipForm({
+      category: plan?.category ?? "Regular",
+      duration: plan?.duration ?? "1 Month",
+      price: String(plan?.price ?? 10000),
+    });
+    setActiveModal("membership");
+  }
+
   function addMember(formData: FormData) {
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return;
@@ -338,7 +378,7 @@ export default function AdminPanel({
       name,
       phone: String(formData.get("phone") ?? ""),
       branch: String(formData.get("branch") ?? "Delhi Branch"),
-      plan: String(formData.get("plan") ?? "Monthly Access"),
+      plan: String(formData.get("plan") ?? "Regular 1 Month"),
       status: String(formData.get("status") ?? "active") as MemberStatus,
       expiry: String(formData.get("expiry") ?? "30 Jun 2026"),
       dues: 0,
@@ -478,6 +518,77 @@ export default function AdminPanel({
         staff: current.staff.map((staff) => (staff.id === id ? { ...staff, branch } : staff)),
       }),
       "Staff branch updated",
+    );
+  }
+
+  function isMembershipPlanUsed(plan: MembershipPlan) {
+    const label = membershipPlanLabel(plan);
+    return snapshot.members.some((member) => member.plan === label || member.plan === plan.id);
+  }
+
+  function addMembershipPlan(formData: FormData) {
+    const category = String(formData.get("category") ?? "Regular") as MembershipPlan["category"];
+    const duration = String(formData.get("duration") ?? "").trim();
+    const price = Number(formData.get("price") ?? 0);
+    if (!duration || !price) return;
+    const membershipPlan: MembershipPlan = {
+      id: createId("MEM", snapshot.membershipPlans.length + 100),
+      category,
+      duration,
+      price,
+      status: "active",
+    };
+    updateSnapshot((current) => ({ ...current, membershipPlans: [membershipPlan, ...current.membershipPlans] }), "Membership plan added");
+  }
+
+  function updateMembershipPlan(id: string, formData: FormData) {
+    const category = String(formData.get("category") ?? "Regular") as MembershipPlan["category"];
+    const duration = String(formData.get("duration") ?? "").trim();
+    const price = Number(formData.get("price") ?? 0);
+    if (!duration || !price) return;
+    updateSnapshot(
+      (current) => ({
+        ...current,
+        membershipPlans: current.membershipPlans.map((plan) =>
+          plan.id === id ? { ...plan, category, duration, price } : plan,
+        ),
+      }),
+      "Membership plan updated",
+    );
+  }
+
+  function archiveMembershipPlan(id: string) {
+    updateSnapshot(
+      (current) => ({
+        ...current,
+        membershipPlans: current.membershipPlans.map((plan) => (plan.id === id ? { ...plan, status: "archived" } : plan)),
+      }),
+      "Membership plan archived",
+    );
+  }
+
+  function restoreMembershipPlan(id: string) {
+    updateSnapshot(
+      (current) => ({
+        ...current,
+        membershipPlans: current.membershipPlans.map((plan) => (plan.id === id ? { ...plan, status: "active" } : plan)),
+      }),
+      "Membership plan restored",
+    );
+  }
+
+  function deleteMembershipPlan(id: string) {
+    const plan = snapshot.membershipPlans.find((item) => item.id === id);
+    if (plan && isMembershipPlanUsed(plan)) {
+      archiveMembershipPlan(id);
+      return;
+    }
+    updateSnapshot(
+      (current) => ({
+        ...current,
+        membershipPlans: current.membershipPlans.filter((plan) => plan.id !== id),
+      }),
+      "Membership plan deleted",
     );
   }
 
@@ -1016,22 +1127,72 @@ export default function AdminPanel({
     </ModuleCard>
   );
 
-  const plansModule = (
+  const membershipModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">Membership Fees & Plans</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">Membership Menu</h2>
+          <p className="mt-1 text-sm text-slate-500">Owner-managed packages, pricing, and availability.</p>
+        </div>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => openMembershipModal()} type="button">
+          Add membership
+        </button>
+      </div>
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         {membershipCategories.map((category) => (
           <div className="rounded-lg border border-slate-200 p-4" key={category}>
-            <p className="text-sm font-black text-slate-950">{category}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-black text-slate-950">{category}</p>
+              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">
+                {snapshot.membershipPlans.filter((plan) => plan.category === category && plan.status === "active").length} active
+              </span>
+            </div>
             <div className="mt-3 grid gap-2">
               {snapshot.membershipPlans
                 .filter((plan) => plan.category === category)
-                .map((plan) => (
-                  <div className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm" key={plan.id}>
-                    <span className="font-semibold text-slate-700">{plan.duration}</span>
-                    <span className="font-black text-slate-950">{formatCurrency(plan.price)}</span>
+                .map((plan) => {
+                  const used = isMembershipPlanUsed(plan);
+                  const assignedMembers = snapshot.members.filter((member) => member.plan === membershipPlanLabel(plan) || member.plan === plan.id).length;
+                  return (
+                  <div className={`rounded-md border px-3 py-3 text-sm ${plan.status === "archived" ? "border-slate-200 bg-slate-100 text-slate-500" : "border-slate-200 bg-slate-50"}`} key={plan.id}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="font-semibold text-slate-700">{plan.duration}</span>
+                        <p className="mt-1 text-xs text-slate-500">{assignedMembers} assigned</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-black text-slate-950">{formatCurrency(plan.price)}</span>
+                        <p className={`mt-1 text-xs font-bold ${plan.status === "archived" ? "text-amber-700" : "text-emerald-700"}`}>{plan.status}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-slate-800" onClick={() => openMembershipModal(plan)} type="button">
+                        Edit
+                      </button>
+                      {plan.status === "archived" ? (
+                        <>
+                          <button className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800" onClick={() => restoreMembershipPlan(plan.id)} type="button">
+                            Restore
+                          </button>
+                          {!used ? (
+                            <button className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-bold text-rose-800" onClick={() => deleteMembershipPlan(plan.id)} type="button">
+                              Delete
+                            </button>
+                          ) : null}
+                        </>
+                      ) : used ? (
+                        <button className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800" onClick={() => archiveMembershipPlan(plan.id)} type="button">
+                          Archive
+                        </button>
+                      ) : (
+                        <button className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-bold text-rose-800" onClick={() => deleteMembershipPlan(plan.id)} type="button">
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
-                ))}
+                );
+              })}
             </div>
           </div>
         ))}
@@ -1040,7 +1201,12 @@ export default function AdminPanel({
         <p className="text-sm font-black text-slate-950">Extra PT available</p>
         <p className="mt-1 text-sm text-slate-700">Members can try optional personal training separately from the regular membership packages.</p>
       </div>
-      <h3 className="mt-8 text-lg font-black">Diet & Workout Assignments</h3>
+    </ModuleCard>
+  );
+
+  const plansModule = (
+    <ModuleCard>
+      <h2 className="text-xl font-black">Diet & Workout Assignments</h2>
       <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={(event) => submitForm(event, addPlan)}>
         <Field label="Member">
           <select className={inputClass} name="member" onChange={(event) => setPlanForm({ ...planForm, member: event.target.value })} value={planForm.member}>
@@ -1150,6 +1316,7 @@ export default function AdminPanel({
   const modules: Record<AdminModule, React.ReactNode> = {
     overview: overviewModule,
     members: membersModule,
+    membership: membershipModule,
     billing: billingModule,
     payments: paymentsModule,
     pt: ptModule,
@@ -1190,7 +1357,13 @@ export default function AdminPanel({
               </select>
             </Field>
             <Field label="Plan">
-              <input className={inputClass} name="plan" onChange={(event) => setMemberForm({ ...memberForm, plan: event.target.value })} value={memberForm.plan} />
+              <select className={inputClass} name="plan" onChange={(event) => setMemberForm({ ...memberForm, plan: event.target.value })} value={memberForm.plan}>
+                {activeMembershipPlans.map((plan) => (
+                  <option key={plan.id} value={membershipPlanLabel(plan)}>
+                    {membershipPlanLabel(plan)} - {formatCurrency(plan.price)}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Status">
               <select className={inputClass} name="status" onChange={(event) => setMemberForm({ ...memberForm, status: event.target.value as MemberStatus })} value={memberForm.status}>
@@ -1254,6 +1427,48 @@ export default function AdminPanel({
               </button>
               <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">
                 Create staff
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "membership" ? (
+        <Modal
+          description="Owner controls for the public membership menu. Delete unused packages or archive packages already assigned to members."
+          onClose={() => {
+            setActiveModal(null);
+            setEditingMembershipId(null);
+          }}
+          title={editingMembershipId ? "Edit membership" : "Add membership"}
+        >
+          <form className="grid gap-4 md:grid-cols-3" onSubmit={submitMembershipModal}>
+            <Field label="Category">
+              <select className={inputClass} name="category" onChange={(event) => setMembershipForm({ ...membershipForm, category: event.target.value as MembershipPlan["category"] })} value={membershipForm.category}>
+                {membershipCategories.map((category) => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Duration">
+              <input className={inputClass} name="duration" onChange={(event) => setMembershipForm({ ...membershipForm, duration: event.target.value })} placeholder="1 Month" value={membershipForm.duration} />
+            </Field>
+            <Field label="Price">
+              <input className={inputClass} inputMode="numeric" name="price" onChange={(event) => setMembershipForm({ ...membershipForm, price: event.target.value })} placeholder="10000" value={membershipForm.price} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-3 md:flex-row md:justify-end">
+              <button
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800"
+                onClick={() => {
+                  setActiveModal(null);
+                  setEditingMembershipId(null);
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">
+                {editingMembershipId ? "Save changes" : "Add membership"}
               </button>
             </div>
           </form>
