@@ -1,6 +1,7 @@
 export type MemberStatus = "active" | "due" | "paused" | "lead";
 export type StaffRole = "Owner" | "Manager" | "Trainer" | "Front Desk";
 export type AttendanceTrend = "up" | "steady" | "down";
+export type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
 
 export type Member = {
   id: string;
@@ -35,11 +36,19 @@ export type StaffMember = {
 
 export type ClassSlot = {
   id: string;
+  day: Weekday;
   name: string;
   coach: string;
   time: string;
   booked: number;
   capacity: number;
+};
+
+export type MembershipPlan = {
+  id: string;
+  category: "Regular" | "3 Days a Week" | "2 Days a Week";
+  duration: string;
+  price: number;
 };
 
 export type Lead = {
@@ -71,6 +80,7 @@ export type DashboardSnapshot = {
   attendance: Array<{ label: string; visits: number; trend: AttendanceTrend }>;
   members: Member[];
   invoices: Invoice[];
+  membershipPlans: MembershipPlan[];
   staff: StaffMember[];
   classes: ClassSlot[];
   leads: Lead[];
@@ -108,6 +118,17 @@ const dashboardSeed: DashboardSnapshot = {
   ],
   members: [
     {
+      id: "MBR-86108",
+      name: "Sahil Kashyap",
+      phone: "+91 79822 19140",
+      plan: "VIP 12 Months",
+      status: "active",
+      expiry: "06 Oct 2026",
+      dues: 0,
+      lastCheckIn: "MMA package active",
+      trainer: "Aanand Thakur",
+    },
+    {
       id: "MBR-1048",
       name: "Aarav Sharma",
       phone: "+91 98765 41048",
@@ -143,6 +164,15 @@ const dashboardSeed: DashboardSnapshot = {
   ],
   invoices: [
     {
+      id: "INV-1705",
+      member: "Sahil Kashyap",
+      amount: 52500,
+      gst: 0,
+      status: "paid",
+      issuedOn: "06 Oct 2025",
+      paymentMode: "Google Pay Screenshot",
+    },
+    {
       id: "INV-2621",
       member: "Meera Iyer",
       amount: 12500,
@@ -169,6 +199,19 @@ const dashboardSeed: DashboardSnapshot = {
       issuedOn: "07 May 2026",
       paymentMode: "Google Pay Screenshot",
     },
+  ],
+  membershipPlans: [
+    { id: "MEM-REG-01", category: "Regular", duration: "1 Month", price: 10000 },
+    { id: "MEM-REG-03", category: "Regular", duration: "3 Month", price: 20000 },
+    { id: "MEM-REG-06", category: "Regular", duration: "6 Month", price: 35000 },
+    { id: "MEM-REG-12", category: "Regular", duration: "12 Month", price: 60000 },
+    { id: "MEM-3DAY-01", category: "3 Days a Week", duration: "1 Month", price: 8000 },
+    { id: "MEM-3DAY-03", category: "3 Days a Week", duration: "3 Month", price: 16000 },
+    { id: "MEM-3DAY-06", category: "3 Days a Week", duration: "6 Month", price: 30000 },
+    { id: "MEM-3DAY-12", category: "3 Days a Week", duration: "12 Month", price: 48000 },
+    { id: "MEM-2DAY-03", category: "2 Days a Week", duration: "3 Month", price: 14000 },
+    { id: "MEM-2DAY-06", category: "2 Days a Week", duration: "6 Month", price: 25000 },
+    { id: "MEM-2DAY-12", category: "2 Days a Week", duration: "12 Month", price: 40000 },
   ],
   staff: [
     {
@@ -197,9 +240,31 @@ const dashboardSeed: DashboardSnapshot = {
     },
   ],
   classes: [
-    { id: "CLS-11", name: "HIIT Burn", coach: "Nisha", time: "6:30 PM", booked: 22, capacity: 25 },
-    { id: "CLS-12", name: "Mobility Flow", coach: "Tara", time: "7:30 PM", booked: 14, capacity: 18 },
-    { id: "CLS-13", name: "Boxing Basics", coach: "Rahul", time: "8:15 PM", booked: 17, capacity: 20 },
+    { id: "CLS-MON-01", day: "Monday", name: "Jiu Jitsu", coach: "Saket HQ", time: "8:00 AM", booked: 18, capacity: 24 },
+    { id: "CLS-MON-02", day: "Monday", name: "Kids Class BJJ", coach: "Saket HQ", time: "4:30 PM", booked: 16, capacity: 20 },
+    { id: "CLS-MON-03", day: "Monday", name: "Wrestling", coach: "Saket HQ", time: "5:30 PM", booked: 20, capacity: 24 },
+    { id: "CLS-MON-04", day: "Monday", name: "Jiu Jitsu (Gi)", coach: "Saket HQ", time: "7:00 PM", booked: 19, capacity: 24 },
+    { id: "CLS-MON-05", day: "Monday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 22, capacity: 30 },
+    { id: "CLS-TUE-01", day: "Tuesday", name: "Muay Thai", coach: "Saket HQ", time: "8:00 AM", booked: 21, capacity: 24 },
+    { id: "CLS-TUE-02", day: "Tuesday", name: "MMA Fundamentals", coach: "Saket HQ", time: "5:30 PM", booked: 23, capacity: 26 },
+    { id: "CLS-TUE-03", day: "Tuesday", name: "BJJ Fundamentals", coach: "Saket HQ", time: "7:00 PM", booked: 20, capacity: 24 },
+    { id: "CLS-TUE-04", day: "Tuesday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 24, capacity: 30 },
+    { id: "CLS-WED-01", day: "Wednesday", name: "MMA Pro Invite Only", coach: "Saket HQ", time: "11:00 AM", booked: 10, capacity: 12 },
+    { id: "CLS-WED-02", day: "Wednesday", name: "Kids Class BJJ", coach: "Saket HQ", time: "4:30 PM", booked: 15, capacity: 20 },
+    { id: "CLS-WED-03", day: "Wednesday", name: "Wrestling", coach: "Saket HQ", time: "5:30 PM", booked: 21, capacity: 24 },
+    { id: "CLS-WED-04", day: "Wednesday", name: "Muay Thai", coach: "Saket HQ", time: "7:00 PM", booked: 24, capacity: 26 },
+    { id: "CLS-WED-05", day: "Wednesday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 22, capacity: 30 },
+    { id: "CLS-THU-01", day: "Thursday", name: "MMA Fundamentals", coach: "Saket HQ", time: "8:00 AM", booked: 20, capacity: 24 },
+    { id: "CLS-THU-02", day: "Thursday", name: "MMA Fundamentals", coach: "Saket HQ", time: "5:30 PM", booked: 23, capacity: 26 },
+    { id: "CLS-THU-03", day: "Thursday", name: "Jiu Jitsu", coach: "Saket HQ", time: "7:00 PM", booked: 18, capacity: 24 },
+    { id: "CLS-THU-04", day: "Thursday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 24, capacity: 30 },
+    { id: "CLS-FRI-01", day: "Friday", name: "Wrestling", coach: "Saket HQ", time: "8:00 AM", booked: 18, capacity: 24 },
+    { id: "CLS-FRI-02", day: "Friday", name: "Kids Class BJJ", coach: "Saket HQ", time: "4:30 PM", booked: 17, capacity: 20 },
+    { id: "CLS-FRI-03", day: "Friday", name: "BJJ Fundamentals", coach: "Saket HQ", time: "5:30 PM", booked: 22, capacity: 24 },
+    { id: "CLS-FRI-04", day: "Friday", name: "Muay Thai", coach: "Saket HQ", time: "7:00 PM", booked: 24, capacity: 26 },
+    { id: "CLS-FRI-05", day: "Friday", name: "Crosstrain 30", coach: "Open Mat", time: "5:00 PM to 9:00 PM", booked: 23, capacity: 30 },
+    { id: "CLS-SAT-01", day: "Saturday", name: "Jiu Jitsu", coach: "Saket HQ", time: "11:30 AM", booked: 19, capacity: 24 },
+    { id: "CLS-SUN-01", day: "Sunday", name: "Off", coach: "Saket HQ", time: "Closed", booked: 0, capacity: 1 },
   ],
   leads: [
     { id: "LED-442", name: "Ananya Das", source: "Instagram", stage: "Trial booked", nextFollowUp: "Today" },
@@ -211,6 +276,7 @@ const dashboardSeed: DashboardSnapshot = {
     { id: "PLN-88", member: "Meera Iyer", calories: 1850, protein: 118, workoutSplit: "Strength + Yoga", adherence: 74 },
   ],
   ptPackages: [
+    { id: "PT-TRY-01", member: "Walk-in Trial", trainer: "Available coach", sessionsLeft: 1, progress: 0 },
     { id: "PT-771", member: "Aarav Sharma", trainer: "Nisha", sessionsLeft: 8, progress: 72 },
     { id: "PT-763", member: "Meera Iyer", trainer: "Rahul", sessionsLeft: 3, progress: 58 },
     { id: "PT-758", member: "Riya Menon", trainer: "Nisha", sessionsLeft: 12, progress: 34 },

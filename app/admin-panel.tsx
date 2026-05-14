@@ -7,10 +7,12 @@ import type {
   DashboardSnapshot,
   Invoice,
   Lead,
+  MembershipPlan,
   Member,
   MemberStatus,
   PlanAssignment,
   StaffMember,
+  Weekday,
 } from "@/lib/gym-data";
 
 export type AdminModule =
@@ -34,6 +36,8 @@ type Toast = { id: number; message: string };
 const storageKey = "crosstrain-admin-snapshot";
 const moduleAccess = ["Members", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
+const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const membershipCategories: MembershipPlan["category"][] = ["Regular", "3 Days a Week", "2 Days a Week"];
 
 const routes: Array<{ key: AdminModule; label: string; href: string }> = [
   { key: "overview", label: "Overview", href: "/" },
@@ -101,6 +105,18 @@ function ModuleCard({ children, className = "" }: { children: React.ReactNode; c
   return <article className={`rounded-lg border border-slate-200 bg-white p-5 shadow-sm ${className}`}>{children}</article>;
 }
 
+function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSnapshot): DashboardSnapshot {
+  return {
+    ...initialSnapshot,
+    ...saved,
+    membershipPlans: saved.membershipPlans ?? initialSnapshot.membershipPlans,
+    classes: (saved.classes ?? initialSnapshot.classes).map((slot) => ({
+      ...slot,
+      day: slot.day ?? "Monday",
+    })),
+  };
+}
+
 export default function AdminPanel({
   initialSnapshot,
   module,
@@ -132,6 +148,7 @@ export default function AdminPanel({
     access: ["Members", "PT", "Plans"],
   });
   const [classForm, setClassForm] = useState({
+    day: "Monday" as Weekday,
     name: "",
     coach: "",
     time: "7:00 PM",
@@ -154,7 +171,7 @@ export default function AdminPanel({
     const saved = window.localStorage.getItem(storageKey);
     if (saved) {
       window.setTimeout(() => {
-        if (mounted) setSnapshot(JSON.parse(saved) as DashboardSnapshot);
+        if (mounted) setSnapshot(restoreSnapshot(JSON.parse(saved) as DashboardSnapshot, initialSnapshot));
       }, 0);
     }
     return () => {
@@ -341,6 +358,7 @@ export default function AdminPanel({
     if (!name) return;
     const slot: ClassSlot = {
       id: createId("CLS", snapshot.classes.length + 20),
+      day: String(formData.get("day") ?? "Monday") as Weekday,
       name,
       coach: String(formData.get("coach") ?? ""),
       time: String(formData.get("time") ?? "7:00 PM"),
@@ -693,7 +711,13 @@ export default function AdminPanel({
 
   const ptModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">PT Management</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">PT Management</h2>
+          <p className="mt-1 text-sm text-slate-500">Extra PT is available as an optional trial or add-on for members who want to try it.</p>
+        </div>
+        <span className="rounded-md bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800">Optional add-on</span>
+      </div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.ptPackages.map((pack) => (
           <div className="grid gap-2 rounded-lg border border-slate-200 p-4" key={pack.id}>
@@ -758,7 +782,15 @@ export default function AdminPanel({
   const classesModule = (
     <ModuleCard>
       <h2 className="text-xl font-black">Class Scheduling</h2>
-      <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={(event) => submitForm(event, addClass)}>
+      <p className="mt-1 text-sm text-slate-500">Crosstrain Fight Club Saket weekly timetable.</p>
+      <form className="mt-4 grid gap-3 md:grid-cols-5" onSubmit={(event) => submitForm(event, addClass)}>
+        <Field label="Day">
+          <select className={inputClass} name="day" onChange={(event) => setClassForm({ ...classForm, day: event.target.value as Weekday })} value={classForm.day}>
+            {weekdays.map((day) => (
+              <option key={day} value={day}>{day}</option>
+            ))}
+          </select>
+        </Field>
         <Field label="Class">
           <input className={inputClass} name="name" onChange={(event) => setClassForm({ ...classForm, name: event.target.value })} placeholder="Yoga, HIIT..." value={classForm.name} />
         </Field>
@@ -771,7 +803,7 @@ export default function AdminPanel({
         <Field label="Capacity">
           <input className={inputClass} inputMode="numeric" name="capacity" onChange={(event) => setClassForm({ ...classForm, capacity: event.target.value })} value={classForm.capacity} />
         </Field>
-        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white md:col-span-4" type="submit">Schedule class</button>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white md:col-span-5" type="submit">Schedule class</button>
       </form>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.classes.map((slot) => {
@@ -781,7 +813,7 @@ export default function AdminPanel({
               <div className="flex justify-between gap-3">
                 <div>
                   <p className="font-bold">{slot.name}</p>
-                  <p className="text-xs text-slate-500">{slot.time} · {slot.coach}</p>
+                  <p className="text-xs text-slate-500">{slot.day} · {slot.time} · {slot.coach}</p>
                 </div>
                 <p className="text-sm font-bold">{slot.booked}/{slot.capacity}</p>
               </div>
@@ -834,7 +866,29 @@ export default function AdminPanel({
 
   const plansModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">Diet & Workout Plans</h2>
+      <h2 className="text-xl font-black">Membership Fees & Plans</h2>
+      <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        {membershipCategories.map((category) => (
+          <div className="rounded-lg border border-slate-200 p-4" key={category}>
+            <p className="text-sm font-black text-slate-950">{category}</p>
+            <div className="mt-3 grid gap-2">
+              {snapshot.membershipPlans
+                .filter((plan) => plan.category === category)
+                .map((plan) => (
+                  <div className="flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm" key={plan.id}>
+                    <span className="font-semibold text-slate-700">{plan.duration}</span>
+                    <span className="font-black text-slate-950">{formatCurrency(plan.price)}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <p className="text-sm font-black text-slate-950">Extra PT available</p>
+        <p className="mt-1 text-sm text-slate-700">Members can try optional personal training separately from the regular membership packages.</p>
+      </div>
+      <h3 className="mt-8 text-lg font-black">Diet & Workout Assignments</h3>
       <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={(event) => submitForm(event, addPlan)}>
         <Field label="Member">
           <select className={inputClass} name="member" onChange={(event) => setPlanForm({ ...planForm, member: event.target.value })} value={planForm.member}>
