@@ -33,7 +33,14 @@ type PtPackage = DashboardSnapshot["ptPackages"][number];
 type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
-type ActiveModal = "member" | "staff" | "membership" | null;
+type ActiveModal = "member" | "staff" | "membership" | "invoice" | "class" | "lead" | "plan" | "pt" | "payment" | "confirm" | null;
+type ConfirmDialog = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  tone?: "default" | "danger";
+  onConfirm: () => void;
+};
 
 const storageKey = "crosstrain-admin-snapshot-v8";
 const moduleAccess = ["Members", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
@@ -232,6 +239,7 @@ export default function AdminPanel({
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [toast, setToast] = useState<Toast | null>(null);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const toastId = useRef(0);
 
   const [memberForm, setMemberForm] = useState({
@@ -278,6 +286,16 @@ export default function AdminPanel({
     calories: "2200",
     protein: "130",
     workoutSplit: "Full Body Strength",
+  });
+  const [ptForm, setPtForm] = useState({
+    member: initialSnapshot.members[0]?.name ?? "",
+    trainer: "Unassigned",
+    sessionsLeft: "12",
+  });
+  const [paymentForm, setPaymentForm] = useState({
+    invoiceId: "",
+    paymentMode: "Cash" as Invoice["paymentMode"],
+    reference: "",
   });
 
   useEffect(() => {
@@ -329,9 +347,50 @@ export default function AdminPanel({
     flash("Demo data reset");
   }
 
-  function submitForm(event: FormEvent<HTMLFormElement>, action: (formData: FormData) => void) {
+  function openConfirmDialog(dialog: ConfirmDialog) {
+    setConfirmDialog(dialog);
+    setActiveModal("confirm");
+  }
+
+  function submitInvoiceModal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    action(new FormData(event.currentTarget));
+    addInvoice(new FormData(event.currentTarget));
+    setActiveModal(null);
+  }
+
+  function submitClassModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    if (!String(formData.get("name") ?? "").trim()) return;
+    addClass(formData);
+    setActiveModal(null);
+  }
+
+  function submitLeadModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    if (!String(formData.get("name") ?? "").trim()) return;
+    addLead(formData);
+    setActiveModal(null);
+  }
+
+  function submitPlanModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    addPlan(new FormData(event.currentTarget));
+    setActiveModal(null);
+  }
+
+  function submitPtModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    addPtPackage(new FormData(event.currentTarget));
+    setActiveModal(null);
+  }
+
+  function submitPaymentModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    markInvoicePaid(String(formData.get("invoiceId") ?? ""), String(formData.get("paymentMode") ?? "Cash") as Invoice["paymentMode"]);
+    setActiveModal(null);
   }
 
   function submitMemberModal(event: FormEvent<HTMLFormElement>) {
@@ -372,6 +431,24 @@ export default function AdminPanel({
       price: String(plan?.price ?? 10000),
     });
     setActiveModal("membership");
+  }
+
+  function openPtModal(member: Member) {
+    setPtForm({
+      member: member.name,
+      trainer: member.trainer,
+      sessionsLeft: "12",
+    });
+    setActiveModal("pt");
+  }
+
+  function openPaymentModal(invoice: Invoice, paymentMode: Invoice["paymentMode"]) {
+    setPaymentForm({
+      invoiceId: invoice.id,
+      paymentMode,
+      reference: "",
+    });
+    setActiveModal("payment");
   }
 
   function addMember(formData: FormData) {
@@ -453,13 +530,13 @@ export default function AdminPanel({
     );
   }
 
-  function markInvoicePaid(id: string) {
+  function markInvoicePaid(id: string, paymentMode?: Invoice["paymentMode"]) {
     updateSnapshot(
       (current) => {
         const invoice = current.invoices.find((item) => item.id === id);
         return {
           ...current,
-          invoices: current.invoices.map((item) => (item.id === id ? { ...item, status: "paid" } : item)),
+          invoices: current.invoices.map((item) => (item.id === id ? { ...item, status: "paid", paymentMode: paymentMode ?? item.paymentMode } : item)),
           members: current.members.map((member) =>
             invoice && member.name === invoice.member
               ? { ...member, status: "active", dues: Math.max(0, member.dues - invoice.amount - invoice.gst) }
@@ -471,13 +548,14 @@ export default function AdminPanel({
     );
   }
 
-  function addPtPackage(member: string) {
-    const trainer = snapshot.members.find((item) => item.name === member)?.trainer ?? "Unassigned";
+  function addPtPackage(formData: FormData) {
+    const member = String(formData.get("member") ?? "");
+    const trainer = String(formData.get("trainer") ?? "Unassigned");
     const pack: PtPackage = {
       id: createId("PT", snapshot.ptPackages.length + 800),
       member,
       trainer,
-      sessionsLeft: 12,
+      sessionsLeft: Number(formData.get("sessionsLeft") ?? 12),
       progress: 0,
     };
     updateSnapshot((current) => ({ ...current, ptPackages: [pack, ...current.ptPackages] }), "PT package assigned");
@@ -818,10 +896,10 @@ export default function AdminPanel({
               <span className="mt-1 block text-slate-600">{invoice.id} · {formatCurrency(invoice.amount + invoice.gst)}</span>
               <span className="mt-1 block text-xs text-slate-500">Invoice mode: {invoice.paymentMode}</span>
               <div className="mt-4 grid gap-2">
-                <button className="rounded-md bg-slate-950 px-3 py-2 text-left text-xs font-black text-white transition hover:bg-slate-800" onClick={() => markInvoicePaid(invoice.id)} type="button">
+                <button className="rounded-md bg-slate-950 px-3 py-2 text-left text-xs font-black text-white transition hover:bg-slate-800" onClick={() => openPaymentModal(invoice, "Cash")} type="button">
                   Record cash payment
                 </button>
-                <button className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-xs font-black text-emerald-800 transition hover:bg-emerald-100" onClick={() => markInvoicePaid(invoice.id)} type="button">
+                <button className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-xs font-black text-emerald-800 transition hover:bg-emerald-100" onClick={() => openPaymentModal(invoice, "Google Pay Screenshot")} type="button">
                   Verify Google Pay screenshot
                 </button>
                 <button className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-black text-slate-400" disabled type="button">
@@ -893,7 +971,7 @@ export default function AdminPanel({
                     <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => updateMemberStatus(member.id, "active")} type="button">Activate</button>
                     <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => updateMemberStatus(member.id, "paused")} type="button">Pause</button>
                     <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => updateMemberStatus(member.id, "due")} type="button">Mark due</button>
-                    <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => addPtPackage(member.name)} type="button">Add PT</button>
+                    <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => openPtModal(member)} type="button">Add PT</button>
                   </div>
                 </td>
               </tr>
@@ -906,36 +984,15 @@ export default function AdminPanel({
 
   const billingModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">Billing & GST Invoicing</h2>
-      <form className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => submitForm(event, addInvoice)}>
-        <Field label="Member">
-          <select className={inputClass} name="member" onChange={(event) => setInvoiceForm({ ...invoiceForm, member: event.target.value })} value={invoiceForm.member}>
-            {snapshot.members.map((member) => (
-              <option key={member.id} value={member.name}>{member.name}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Amount before GST">
-          <input className={inputClass} inputMode="numeric" name="amount" onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} value={invoiceForm.amount} />
-        </Field>
-        <Field label="Status">
-          <select className={inputClass} name="status" onChange={(event) => setInvoiceForm({ ...invoiceForm, status: event.target.value as InvoiceStatus })} value={invoiceForm.status}>
-            <option value="draft">Draft</option>
-            <option value="due">Due</option>
-            <option value="paid">Paid</option>
-          </select>
-        </Field>
-        <Field label="Mode">
-          <select className={inputClass} name="paymentMode" onChange={(event) => setInvoiceForm({ ...invoiceForm, paymentMode: event.target.value as Invoice["paymentMode"] })} value={invoiceForm.paymentMode}>
-            <option value="Cash">Cash</option>
-            <option value="Google Pay Screenshot">Google Pay screenshot</option>
-            <option value="Razorpay">Razorpay (future)</option>
-          </select>
-        </Field>
-        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white md:col-span-2 xl:col-span-4" data-testid="create-invoice" type="submit">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">Billing & GST Invoicing</h2>
+          <p className="mt-1 text-sm text-slate-500">Create invoices and reconcile payment status.</p>
+        </div>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" data-testid="create-invoice" onClick={() => setActiveModal("invoice")} type="button">
           Create GST invoice
         </button>
-      </form>
+      </div>
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.invoices.map((invoice) => (
           <div className="rounded-lg border border-slate-200 p-4" key={invoice.id}>
@@ -955,7 +1012,7 @@ export default function AdminPanel({
                 <p className="text-xs text-slate-500">GST</p>
                 <p className="font-bold">{formatCurrency(invoice.gst)}</p>
               </div>
-              <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold disabled:opacity-40" disabled={invoice.status === "paid"} onClick={() => markInvoicePaid(invoice.id)} type="button">
+              <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold disabled:opacity-40" disabled={invoice.status === "paid"} onClick={() => openPaymentModal(invoice, invoice.paymentMode)} type="button">
                 Mark paid
               </button>
             </div>
@@ -1048,30 +1105,15 @@ export default function AdminPanel({
 
   const classesModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">Class Scheduling</h2>
-      <p className="mt-1 text-sm text-slate-500">Crosstrain Fight Club Saket weekly timetable.</p>
-      <form className="mt-4 grid gap-3 md:grid-cols-5" onSubmit={(event) => submitForm(event, addClass)}>
-        <Field label="Day">
-          <select className={inputClass} name="day" onChange={(event) => setClassForm({ ...classForm, day: event.target.value as Weekday })} value={classForm.day}>
-            {weekdays.map((day) => (
-              <option key={day} value={day}>{day}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Class">
-          <input className={inputClass} name="name" onChange={(event) => setClassForm({ ...classForm, name: event.target.value })} placeholder="Yoga, HIIT..." value={classForm.name} />
-        </Field>
-        <Field label="Coach">
-          <input className={inputClass} name="coach" onChange={(event) => setClassForm({ ...classForm, coach: event.target.value })} value={classForm.coach} />
-        </Field>
-        <Field label="Time">
-          <input className={inputClass} name="time" onChange={(event) => setClassForm({ ...classForm, time: event.target.value })} value={classForm.time} />
-        </Field>
-        <Field label="Capacity">
-          <input className={inputClass} inputMode="numeric" name="capacity" onChange={(event) => setClassForm({ ...classForm, capacity: event.target.value })} value={classForm.capacity} />
-        </Field>
-        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white md:col-span-5" type="submit">Schedule class</button>
-      </form>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">Class Scheduling</h2>
+          <p className="mt-1 text-sm text-slate-500">Crosstrain Fight Club Saket weekly timetable.</p>
+        </div>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("class")} type="button">
+          Schedule class
+        </button>
+      </div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.classes.map((slot) => {
           const fillRate = Math.round((slot.booked / slot.capacity) * 100);
@@ -1098,19 +1140,15 @@ export default function AdminPanel({
 
   const leadsModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">Lead Management</h2>
-      <form className="mt-4 grid gap-3 md:grid-cols-3" onSubmit={(event) => submitForm(event, addLead)}>
-        <Field label="Name">
-          <input className={inputClass} name="name" onChange={(event) => setLeadForm({ ...leadForm, name: event.target.value })} placeholder="Lead name" value={leadForm.name} />
-        </Field>
-        <Field label="Source">
-          <input className={inputClass} name="source" onChange={(event) => setLeadForm({ ...leadForm, source: event.target.value })} value={leadForm.source} />
-        </Field>
-        <Field label="Follow-up">
-          <input className={inputClass} name="nextFollowUp" onChange={(event) => setLeadForm({ ...leadForm, nextFollowUp: event.target.value })} value={leadForm.nextFollowUp} />
-        </Field>
-        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white md:col-span-3" type="submit">Capture lead</button>
-      </form>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">Lead Management</h2>
+          <p className="mt-1 text-sm text-slate-500">Capture enquiries, follow-ups, and trial conversions.</p>
+        </div>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("lead")} type="button">
+          Capture lead
+        </button>
+      </div>
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.leads.map((lead) => (
           <div className="rounded-lg border border-slate-200 p-4" key={lead.id}>
@@ -1123,7 +1161,20 @@ export default function AdminPanel({
             </div>
             <div className="mt-3 flex gap-2">
               <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => advanceLead(lead.id)} type="button">Next stage</button>
-              <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => convertLead(lead.id)} type="button">Convert</button>
+              <button
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold"
+                onClick={() =>
+                  openConfirmDialog({
+                    title: "Convert lead",
+                    description: `Create a member profile from ${lead.name} and mark this lead as won.`,
+                    confirmLabel: "Convert lead",
+                    onConfirm: () => convertLead(lead.id),
+                  })
+                }
+                type="button"
+              >
+                Convert
+              </button>
             </div>
           </div>
         ))}
@@ -1179,17 +1230,52 @@ export default function AdminPanel({
                             Restore
                           </button>
                           {!used ? (
-                            <button className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-bold text-rose-800" onClick={() => deleteMembershipPlan(plan.id)} type="button">
+                            <button
+                              className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-bold text-rose-800"
+                              onClick={() =>
+                                openConfirmDialog({
+                                  title: "Delete membership",
+                                  description: `${membershipPlanLabel(plan)} is not assigned to any member. Delete it from the menu?`,
+                                  confirmLabel: "Delete",
+                                  tone: "danger",
+                                  onConfirm: () => deleteMembershipPlan(plan.id),
+                                })
+                              }
+                              type="button"
+                            >
                               Delete
                             </button>
                           ) : null}
                         </>
                       ) : used ? (
-                        <button className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800" onClick={() => archiveMembershipPlan(plan.id)} type="button">
+                        <button
+                          className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800"
+                          onClick={() =>
+                            openConfirmDialog({
+                              title: "Archive membership",
+                              description: `${membershipPlanLabel(plan)} is assigned to members. Archive it so existing records remain intact.`,
+                              confirmLabel: "Archive",
+                              onConfirm: () => archiveMembershipPlan(plan.id),
+                            })
+                          }
+                          type="button"
+                        >
                           Archive
                         </button>
                       ) : (
-                        <button className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-bold text-rose-800" onClick={() => deleteMembershipPlan(plan.id)} type="button">
+                        <button
+                          className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-bold text-rose-800"
+                          onClick={() =>
+                            openConfirmDialog({
+                              title: "Delete membership",
+                              description: `${membershipPlanLabel(plan)} is not assigned to any member. Delete it from the menu?`,
+                              confirmLabel: "Delete",
+                              tone: "danger",
+                              onConfirm: () => deleteMembershipPlan(plan.id),
+                            })
+                          }
+                          type="button"
+                        >
                           Delete
                         </button>
                       )}
@@ -1210,26 +1296,15 @@ export default function AdminPanel({
 
   const plansModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">Diet & Workout Assignments</h2>
-      <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={(event) => submitForm(event, addPlan)}>
-        <Field label="Member">
-          <select className={inputClass} name="member" onChange={(event) => setPlanForm({ ...planForm, member: event.target.value })} value={planForm.member}>
-            {snapshot.members.map((member) => (
-              <option key={member.id} value={member.name}>{member.name}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Calories">
-          <input className={inputClass} inputMode="numeric" name="calories" onChange={(event) => setPlanForm({ ...planForm, calories: event.target.value })} value={planForm.calories} />
-        </Field>
-        <Field label="Protein">
-          <input className={inputClass} inputMode="numeric" name="protein" onChange={(event) => setPlanForm({ ...planForm, protein: event.target.value })} value={planForm.protein} />
-        </Field>
-        <Field label="Workout">
-          <input className={inputClass} name="workoutSplit" onChange={(event) => setPlanForm({ ...planForm, workoutSplit: event.target.value })} value={planForm.workoutSplit} />
-        </Field>
-        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white md:col-span-4" type="submit">Assign plan</button>
-      </form>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">Diet & Workout Assignments</h2>
+          <p className="mt-1 text-sm text-slate-500">Assign nutrition and workout targets to members.</p>
+        </div>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("plan")} type="button">
+          Assign plan
+        </button>
+      </div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.plans.map((plan) => (
           <div className="rounded-lg border border-slate-200 p-4" key={plan.id}>
@@ -1479,6 +1554,191 @@ export default function AdminPanel({
         </Modal>
       ) : null}
 
+      {activeModal === "invoice" ? (
+        <Modal description="Create a GST invoice with amount, status, and payment mode." onClose={() => setActiveModal(null)} title="Create GST invoice">
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submitInvoiceModal}>
+            <Field label="Member">
+              <select className={inputClass} name="member" onChange={(event) => setInvoiceForm({ ...invoiceForm, member: event.target.value })} value={invoiceForm.member}>
+                {snapshot.members.map((member) => (
+                  <option key={member.id} value={member.name}>{member.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Amount before GST">
+              <input className={inputClass} inputMode="numeric" name="amount" onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} value={invoiceForm.amount} />
+            </Field>
+            <Field label="Status">
+              <select className={inputClass} name="status" onChange={(event) => setInvoiceForm({ ...invoiceForm, status: event.target.value as InvoiceStatus })} value={invoiceForm.status}>
+                <option value="draft">Draft</option>
+                <option value="due">Due</option>
+                <option value="paid">Paid</option>
+              </select>
+            </Field>
+            <Field label="Mode">
+              <select className={inputClass} name="paymentMode" onChange={(event) => setInvoiceForm({ ...invoiceForm, paymentMode: event.target.value as Invoice["paymentMode"] })} value={invoiceForm.paymentMode}>
+                <option value="Cash">Cash</option>
+                <option value="Google Pay Screenshot">Google Pay screenshot</option>
+                <option value="Razorpay">Razorpay (future)</option>
+              </select>
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Create invoice</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "payment" ? (
+        <Modal description="Confirm the payment mode before marking this invoice as paid." onClose={() => setActiveModal(null)} title="Record payment">
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submitPaymentModal}>
+            <input name="invoiceId" type="hidden" value={paymentForm.invoiceId} />
+            <Field label="Invoice">
+              <input className={inputClass} disabled value={paymentForm.invoiceId} />
+            </Field>
+            <Field label="Payment mode">
+              <select className={inputClass} name="paymentMode" onChange={(event) => setPaymentForm({ ...paymentForm, paymentMode: event.target.value as Invoice["paymentMode"] })} value={paymentForm.paymentMode}>
+                <option value="Cash">Cash</option>
+                <option value="Google Pay Screenshot">Google Pay screenshot</option>
+                <option value="Razorpay">Razorpay (future)</option>
+              </select>
+            </Field>
+            <Field label="Reference note">
+              <input className={inputClass} name="reference" onChange={(event) => setPaymentForm({ ...paymentForm, reference: event.target.value })} placeholder="Cash receipt or screenshot note" value={paymentForm.reference} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Mark paid</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "pt" ? (
+        <Modal description="Assign optional personal training sessions to a member." onClose={() => setActiveModal(null)} title="Add PT package">
+          <form className="grid gap-4 md:grid-cols-3" onSubmit={submitPtModal}>
+            <Field label="Member">
+              <select className={inputClass} name="member" onChange={(event) => setPtForm({ ...ptForm, member: event.target.value })} value={ptForm.member}>
+                {snapshot.members.map((member) => (
+                  <option key={member.id} value={member.name}>{member.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Trainer">
+              <select className={inputClass} name="trainer" onChange={(event) => setPtForm({ ...ptForm, trainer: event.target.value })} value={ptForm.trainer}>
+                <option value="Unassigned">Unassigned</option>
+                {trainerOptions.map((trainer) => (
+                  <option key={trainer} value={trainer}>{trainer}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Sessions">
+              <input className={inputClass} inputMode="numeric" name="sessionsLeft" onChange={(event) => setPtForm({ ...ptForm, sessionsLeft: event.target.value })} value={ptForm.sessionsLeft} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-3 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Assign PT</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "class" ? (
+        <Modal description="Add a class to the weekly schedule." onClose={() => setActiveModal(null)} title="Schedule class">
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submitClassModal}>
+            <Field label="Day">
+              <select className={inputClass} name="day" onChange={(event) => setClassForm({ ...classForm, day: event.target.value as Weekday })} value={classForm.day}>
+                {weekdays.map((day) => (
+                  <option key={day} value={day}>{day}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Class">
+              <input className={inputClass} name="name" onChange={(event) => setClassForm({ ...classForm, name: event.target.value })} placeholder="Muay Thai, BJJ..." value={classForm.name} />
+            </Field>
+            <Field label="Coach">
+              <input className={inputClass} name="coach" onChange={(event) => setClassForm({ ...classForm, coach: event.target.value })} value={classForm.coach} />
+            </Field>
+            <Field label="Time">
+              <input className={inputClass} name="time" onChange={(event) => setClassForm({ ...classForm, time: event.target.value })} value={classForm.time} />
+            </Field>
+            <Field label="Capacity">
+              <input className={inputClass} inputMode="numeric" name="capacity" onChange={(event) => setClassForm({ ...classForm, capacity: event.target.value })} value={classForm.capacity} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Schedule class</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "lead" ? (
+        <Modal description="Capture a new enquiry and follow-up date." onClose={() => setActiveModal(null)} title="Capture lead">
+          <form className="grid gap-4 md:grid-cols-3" onSubmit={submitLeadModal}>
+            <Field label="Name">
+              <input className={inputClass} name="name" onChange={(event) => setLeadForm({ ...leadForm, name: event.target.value })} placeholder="Lead name" value={leadForm.name} />
+            </Field>
+            <Field label="Source">
+              <input className={inputClass} name="source" onChange={(event) => setLeadForm({ ...leadForm, source: event.target.value })} value={leadForm.source} />
+            </Field>
+            <Field label="Follow-up">
+              <input className={inputClass} name="nextFollowUp" onChange={(event) => setLeadForm({ ...leadForm, nextFollowUp: event.target.value })} value={leadForm.nextFollowUp} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-3 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Capture lead</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "plan" ? (
+        <Modal description="Assign diet and workout targets to a member." onClose={() => setActiveModal(null)} title="Assign diet plan">
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submitPlanModal}>
+            <Field label="Member">
+              <select className={inputClass} name="member" onChange={(event) => setPlanForm({ ...planForm, member: event.target.value })} value={planForm.member}>
+                {snapshot.members.map((member) => (
+                  <option key={member.id} value={member.name}>{member.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Calories">
+              <input className={inputClass} inputMode="numeric" name="calories" onChange={(event) => setPlanForm({ ...planForm, calories: event.target.value })} value={planForm.calories} />
+            </Field>
+            <Field label="Protein">
+              <input className={inputClass} inputMode="numeric" name="protein" onChange={(event) => setPlanForm({ ...planForm, protein: event.target.value })} value={planForm.protein} />
+            </Field>
+            <Field label="Workout">
+              <input className={inputClass} name="workoutSplit" onChange={(event) => setPlanForm({ ...planForm, workoutSplit: event.target.value })} value={planForm.workoutSplit} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Assign plan</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "confirm" && confirmDialog ? (
+        <Modal description={confirmDialog.description} onClose={() => setActiveModal(null)} title={confirmDialog.title}>
+          <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+            <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+            <button
+              className={`rounded-md px-4 py-2 text-sm font-bold text-white ${confirmDialog.tone === "danger" ? "bg-rose-700" : "bg-slate-950"}`}
+              onClick={() => {
+                confirmDialog.onConfirm();
+                setActiveModal(null);
+                setConfirmDialog(null);
+              }}
+              type="button"
+            >
+              {confirmDialog.confirmLabel}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
         <aside className="border-r border-slate-200 bg-white px-5 py-6">
           <Link className="flex items-center gap-3" href="/">
@@ -1531,8 +1791,22 @@ export default function AdminPanel({
               <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("member")} type="button">
                 New member
               </button>
-              <Link className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" href="/billing">Create invoice</Link>
-              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={resetDemoData} type="button">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal("invoice")} type="button">
+                Create invoice
+              </button>
+              <button
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800"
+                onClick={() =>
+                  openConfirmDialog({
+                    title: "Reset demo data",
+                    description: "This clears saved browser data and restores the seeded admin snapshot.",
+                    confirmLabel: "Reset demo",
+                    tone: "danger",
+                    onConfirm: resetDemoData,
+                  })
+                }
+                type="button"
+              >
                 Reset demo
               </button>
             </div>
