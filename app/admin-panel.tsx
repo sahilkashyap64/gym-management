@@ -934,7 +934,7 @@ export default function AdminPanel({
           <Link className="flex items-center gap-3" href="/">
             <div className="grid size-11 place-items-center rounded-lg bg-slate-950 text-sm font-black text-white">CT</div>
             <div>
-              <p className="text-lg font-bold">CrossTrain</p>
+              <p className="text-lg font-bold">Crosstrain Admin panel</p>
               <p className="text-xs font-medium text-slate-500">Gym operations suite</p>
             </div>
           </Link>
@@ -966,7 +966,7 @@ export default function AdminPanel({
         <section className="px-4 py-5 sm:px-6 lg:px-8">
           <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-sm font-semibold text-emerald-700">Admin Panel</p>
+              <p className="text-sm font-semibold text-emerald-700">Crosstrain Admin panel</p>
               <h1 className="mt-1 text-3xl font-black tracking-normal sm:text-4xl">{pageTitle}</h1>
             </div>
             <div className="flex flex-wrap gap-2">

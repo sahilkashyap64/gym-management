@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CrossTrain Admin",
+  title: "Crosstrain Admin panel",
   description: "Gym membership, billing, staff, attendance, and operations dashboard.",
 };
 
