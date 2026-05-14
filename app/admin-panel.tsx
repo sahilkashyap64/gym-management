@@ -240,6 +240,7 @@ export default function AdminPanel({
   const [toast, setToast] = useState<Toast | null>(null);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const toastId = useRef(0);
 
   const [memberForm, setMemberForm] = useState({
@@ -1739,9 +1740,35 @@ export default function AdminPanel({
         </Modal>
       ) : null}
 
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen ? (
+        <div className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      ) : null}
+
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
-        <aside className="border-r border-slate-200 bg-white px-5 py-6">
-          <Link className="flex items-center gap-3" href="/">
+        {/* Sidebar */}
+        <aside className={`fixed inset-y-0 left-0 z-50 w-72 border-r border-slate-200 bg-white px-5 py-6 transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:block ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+          {/* Close button (mobile only) */}
+          <div className="flex items-center justify-between lg:hidden">
+            <Link className="flex items-center gap-3" href="/">
+              <div className="grid size-11 place-items-center rounded-lg bg-slate-950 text-sm font-black text-white">CT</div>
+              <div>
+                <p className="text-lg font-bold">Crosstrain Admin panel</p>
+                <p className="text-xs font-medium text-slate-500">Gym operations suite</p>
+              </div>
+            </Link>
+            <button
+              className="grid size-9 place-items-center rounded-md border border-slate-200 bg-slate-50 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+              onClick={() => setSidebarOpen(false)}
+              type="button"
+              aria-label="Close navigation"
+            >
+              X
+            </button>
+          </div>
+
+          {/* Desktop logo (hidden on mobile) */}
+          <Link className="hidden items-center gap-3 lg:flex" href="/">
             <div className="grid size-11 place-items-center rounded-lg bg-slate-950 text-sm font-black text-white">CT</div>
             <div>
               <p className="text-lg font-bold">Crosstrain Admin panel</p>
@@ -1765,6 +1792,7 @@ export default function AdminPanel({
                 }`}
                 href={route.href}
                 key={route.key}
+                onClick={() => setSidebarOpen(false)}
               >
                 {route.label}
               </Link>
@@ -1775,17 +1803,35 @@ export default function AdminPanel({
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">QR Attendance</p>
             <p className="mt-4 text-2xl font-black text-slate-900">{metrics.attendanceToday}</p>
             <p className="text-xs text-slate-600">Display-only scanner route</p>
-            <Link className="mt-4 inline-flex rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm" href="/qr-attendance">
+            <Link
+              className="mt-4 inline-flex rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-800 shadow-sm"
+              href="/qr-attendance"
+              onClick={() => setSidebarOpen(false)}
+            >
               Open QR page
             </Link>
           </section>
         </aside>
 
+        {/* Main content */}
         <section className="px-4 py-5 sm:px-6 lg:px-8">
           <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-emerald-700">Crosstrain Admin panel</p>
-              <h1 className="mt-1 text-3xl font-black tracking-normal sm:text-4xl">{pageTitle}</h1>
+            <div className="flex items-start gap-3">
+              {/* Hamburger toggle (mobile only) */}
+              <button
+                className="grid place-items-center rounded-md border border-slate-300 bg-white p-2 text-slate-800 transition hover:bg-slate-50 lg:hidden"
+                onClick={() => setSidebarOpen(true)}
+                type="button"
+                aria-label="Open navigation"
+              >
+                <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <div>
+                <p className="text-sm font-semibold text-emerald-700">Crosstrain Admin panel</p>
+                <h1 className="mt-1 text-3xl font-black tracking-normal sm:text-4xl">{pageTitle}</h1>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("member")} type="button">
