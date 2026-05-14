@@ -169,18 +169,35 @@ function Modal({
 }
 
 function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSnapshot): DashboardSnapshot {
+  const attendance = Array.isArray(saved.attendance) ? saved.attendance : initialSnapshot.attendance;
+  const members = Array.isArray(saved.members) ? saved.members : initialSnapshot.members;
+  const invoices = Array.isArray(saved.invoices) ? saved.invoices : initialSnapshot.invoices;
+  const membershipPlans = Array.isArray(saved.membershipPlans) ? saved.membershipPlans : initialSnapshot.membershipPlans;
+  const branches = Array.isArray(saved.branches) ? saved.branches : initialSnapshot.branches;
+  const staff = Array.isArray(saved.staff) ? saved.staff : initialSnapshot.staff;
+  const classes = Array.isArray(saved.classes) ? saved.classes : initialSnapshot.classes;
+  const leads = Array.isArray(saved.leads) ? saved.leads : initialSnapshot.leads;
+  const plans = Array.isArray(saved.plans) ? saved.plans : initialSnapshot.plans;
+  const ptPackages = Array.isArray(saved.ptPackages) ? saved.ptPackages : initialSnapshot.ptPackages;
+
   return {
     ...initialSnapshot,
     ...saved,
-    membershipPlans: saved.membershipPlans ?? initialSnapshot.membershipPlans,
-    branches: saved.branches ?? initialSnapshot.branches,
-    staff: (saved.staff ?? initialSnapshot.staff).map((staff) => ({
+    attendance,
+    members,
+    invoices,
+    membershipPlans,
+    branches,
+    leads,
+    plans,
+    ptPackages,
+    staff: staff.map((staff) => ({
       ...staff,
       branch: staff.branch ?? "Delhi Branch",
       disciplines: staff.disciplines ?? [staff.role],
       bio: staff.bio ?? staff.performance,
     })),
-    classes: (saved.classes ?? initialSnapshot.classes).map((slot) => ({
+    classes: classes.map((slot) => ({
       ...slot,
       day: slot.day ?? "Monday",
     })),
