@@ -21,7 +21,7 @@ export type Invoice = {
   gst: number;
   status: "paid" | "due" | "draft";
   issuedOn: string;
-  paymentMode: "Razorpay" | "UPI" | "Cash" | "Card";
+  paymentMode: "Cash" | "Google Pay Screenshot" | "Razorpay";
 };
 
 export type StaffMember = {
@@ -149,7 +149,7 @@ const dashboardSeed: DashboardSnapshot = {
       gst: 2250,
       status: "due",
       issuedOn: "10 May 2026",
-      paymentMode: "Razorpay",
+      paymentMode: "Google Pay Screenshot",
     },
     {
       id: "INV-2618",
@@ -158,7 +158,7 @@ const dashboardSeed: DashboardSnapshot = {
       gst: 7560,
       status: "paid",
       issuedOn: "08 May 2026",
-      paymentMode: "UPI",
+      paymentMode: "Cash",
     },
     {
       id: "INV-2613",
@@ -167,7 +167,7 @@ const dashboardSeed: DashboardSnapshot = {
       gst: 1710,
       status: "draft",
       issuedOn: "07 May 2026",
-      paymentMode: "Card",
+      paymentMode: "Google Pay Screenshot",
     },
   ],
   staff: [
