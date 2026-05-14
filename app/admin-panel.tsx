@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   ClassSlot,
   DashboardSnapshot,
@@ -32,6 +32,7 @@ type PtPackage = DashboardSnapshot["ptPackages"][number];
 type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
+type ActiveModal = "member" | "staff" | null;
 
 const storageKey = "crosstrain-admin-snapshot-v5";
 const moduleAccess = ["Members", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
@@ -105,6 +106,68 @@ function ModuleCard({ children, className = "" }: { children: React.ReactNode; c
   return <article className={`rounded-lg border border-slate-200 bg-white p-5 shadow-sm ${className}`}>{children}</article>;
 }
 
+function Modal({
+  title,
+  description,
+  children,
+  onClose,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const descriptionId = useId();
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm" onClick={onClose}>
+      <section
+        aria-describedby={descriptionId}
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-200 bg-white p-5 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Quick action</p>
+            <h2 className="mt-1 text-2xl font-black text-slate-950" id={titleId}>{title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600" id={descriptionId}>{description}</p>
+          </div>
+          <button
+            aria-label="Close dialog"
+            className="grid size-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-slate-50 text-sm font-black text-slate-700 transition hover:bg-slate-100"
+            onClick={onClose}
+            type="button"
+          >
+            X
+          </button>
+        </div>
+        <div className="pt-5">{children}</div>
+      </section>
+    </div>
+  );
+}
+
 function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSnapshot): DashboardSnapshot {
   return {
     ...initialSnapshot,
@@ -133,6 +196,7 @@ export default function AdminPanel({
 }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const toastId = useRef(0);
 
   const [memberForm, setMemberForm] = useState({
@@ -184,7 +248,7 @@ export default function AdminPanel({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [initialSnapshot]);
 
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
@@ -222,6 +286,22 @@ export default function AdminPanel({
   function submitForm(event: FormEvent<HTMLFormElement>, action: (formData: FormData) => void) {
     event.preventDefault();
     action(new FormData(event.currentTarget));
+  }
+
+  function submitMemberModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    if (!String(formData.get("name") ?? "").trim()) return;
+    addMember(formData);
+    setActiveModal(null);
+  }
+
+  function submitStaffModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    if (!String(formData.get("name") ?? "").trim()) return;
+    addStaff(formData);
+    setActiveModal(null);
   }
 
   function addMember(formData: FormData) {
@@ -583,36 +663,14 @@ export default function AdminPanel({
 
   const membersModule = (
     <ModuleCard className="p-0">
-      <div className="border-b border-slate-200 p-5">
-        <h2 className="text-xl font-black">Member Management</h2>
-        <form className="mt-4 grid gap-3 md:grid-cols-3" onSubmit={(event) => submitForm(event, addMember)}>
-          <Field label="Name">
-            <input className={inputClass} name="name" onChange={(event) => setMemberForm({ ...memberForm, name: event.target.value })} placeholder="Member name" value={memberForm.name} />
-          </Field>
-          <Field label="Phone">
-            <input className={inputClass} name="phone" onChange={(event) => setMemberForm({ ...memberForm, phone: event.target.value })} placeholder="+91" value={memberForm.phone} />
-          </Field>
-          <Field label="Plan">
-            <input className={inputClass} name="plan" onChange={(event) => setMemberForm({ ...memberForm, plan: event.target.value })} value={memberForm.plan} />
-          </Field>
-          <Field label="Status">
-            <select className={inputClass} name="status" onChange={(event) => setMemberForm({ ...memberForm, status: event.target.value as MemberStatus })} value={memberForm.status}>
-              <option value="active">Active</option>
-              <option value="due">Due</option>
-              <option value="paused">Paused</option>
-              <option value="lead">Lead</option>
-            </select>
-          </Field>
-          <Field label="Expiry">
-            <input className={inputClass} name="expiry" onChange={(event) => setMemberForm({ ...memberForm, expiry: event.target.value })} value={memberForm.expiry} />
-          </Field>
-          <Field label="Trainer">
-            <input className={inputClass} name="trainer" onChange={(event) => setMemberForm({ ...memberForm, trainer: event.target.value })} value={memberForm.trainer} />
-          </Field>
-          <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white md:col-span-3" data-testid="add-member" type="submit">
-            Add member
-          </button>
-        </form>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
+        <div>
+          <h2 className="text-xl font-black">Member Management</h2>
+          <p className="mt-1 text-sm text-slate-500">Profiles, subscriptions, dues, and PT assignment.</p>
+        </div>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("member")} type="button">
+          Add member
+        </button>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[820px] text-left text-sm">
@@ -746,21 +804,15 @@ export default function AdminPanel({
 
   const staffModule = (
     <ModuleCard>
-      <h2 className="text-xl font-black">Staff Management</h2>
-      <form className="mt-4 grid gap-3 md:grid-cols-[1fr_220px_180px]" onSubmit={(event) => submitForm(event, addStaff)}>
-        <Field label="Name">
-          <input className={inputClass} name="name" onChange={(event) => setStaffForm({ ...staffForm, name: event.target.value })} placeholder="Staff name" value={staffForm.name} />
-        </Field>
-        <Field label="Role">
-          <select className={inputClass} name="role" onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as StaffMember["role"] })} value={staffForm.role}>
-            <option value="Trainer">Trainer</option>
-            <option value="Manager">Manager</option>
-            <option value="Front Desk">Front Desk</option>
-            <option value="Owner">Owner</option>
-          </select>
-        </Field>
-        <button className="self-end rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Create staff</button>
-      </form>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black">Staff Management</h2>
+          <p className="mt-1 text-sm text-slate-500">Coach, front desk, and branch operations profiles.</p>
+        </div>
+        <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("staff")} type="button">
+          Create staff
+        </button>
+      </div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.staff.map((staff) => (
           <div className="rounded-lg border border-slate-200 p-4" key={staff.id}>
@@ -1035,6 +1087,78 @@ export default function AdminPanel({
         </div>
       ) : null}
 
+      {activeModal === "member" ? (
+        <Modal
+          description="Create a member profile, assign the starting plan, and set the trainer without leaving the current workspace."
+          onClose={() => setActiveModal(null)}
+          title="New member"
+        >
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submitMemberModal}>
+            <Field label="Name">
+              <input className={inputClass} name="name" onChange={(event) => setMemberForm({ ...memberForm, name: event.target.value })} placeholder="Member name" value={memberForm.name} />
+            </Field>
+            <Field label="Phone">
+              <input className={inputClass} name="phone" onChange={(event) => setMemberForm({ ...memberForm, phone: event.target.value })} placeholder="+91" value={memberForm.phone} />
+            </Field>
+            <Field label="Plan">
+              <input className={inputClass} name="plan" onChange={(event) => setMemberForm({ ...memberForm, plan: event.target.value })} value={memberForm.plan} />
+            </Field>
+            <Field label="Status">
+              <select className={inputClass} name="status" onChange={(event) => setMemberForm({ ...memberForm, status: event.target.value as MemberStatus })} value={memberForm.status}>
+                <option value="active">Active</option>
+                <option value="due">Due</option>
+                <option value="paused">Paused</option>
+                <option value="lead">Lead</option>
+              </select>
+            </Field>
+            <Field label="Expiry">
+              <input className={inputClass} name="expiry" onChange={(event) => setMemberForm({ ...memberForm, expiry: event.target.value })} value={memberForm.expiry} />
+            </Field>
+            <Field label="Trainer">
+              <input className={inputClass} name="trainer" onChange={(event) => setMemberForm({ ...memberForm, trainer: event.target.value })} value={memberForm.trainer} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">
+                Cancel
+              </button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" data-testid="add-member" type="submit">
+                Add member
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "staff" ? (
+        <Modal
+          description="Add a staff profile with the right role. Permissions can still be tuned from the staff card after creation."
+          onClose={() => setActiveModal(null)}
+          title="Create staff"
+        >
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submitStaffModal}>
+            <Field label="Name">
+              <input className={inputClass} name="name" onChange={(event) => setStaffForm({ ...staffForm, name: event.target.value })} placeholder="Staff name" value={staffForm.name} />
+            </Field>
+            <Field label="Role">
+              <select className={inputClass} name="role" onChange={(event) => setStaffForm({ ...staffForm, role: event.target.value as StaffMember["role"] })} value={staffForm.role}>
+                <option value="Trainer">Trainer</option>
+                <option value="Manager">Manager</option>
+                <option value="Front Desk">Front Desk</option>
+                <option value="Owner">Owner</option>
+              </select>
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">
+                Cancel
+              </button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">
+                Create staff
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
         <aside className="border-r border-slate-200 bg-white px-5 py-6">
           <Link className="flex items-center gap-3" href="/">
@@ -1084,7 +1208,9 @@ export default function AdminPanel({
               <h1 className="mt-1 text-3xl font-black tracking-normal sm:text-4xl">{pageTitle}</h1>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" href="/members">New member</Link>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("member")} type="button">
+                New member
+              </button>
               <Link className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" href="/billing">Create invoice</Link>
               <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={resetDemoData} type="button">
                 Reset demo
