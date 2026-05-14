@@ -294,6 +294,17 @@ const dashboardSeed: DashboardSnapshot = {
       performance: "National-level MMA athlete",
       bio: "MMA and fitness coach for the Faridabad branch, focused on wrestling, striking, functional strength, and beginner-to-competitor development.",
     },
+    {
+      id: "STF-04",
+      name: "Aanand Thakur",
+      role: "Front Desk",
+      branch: "Delhi Branch",
+      disciplines: ["Member onboarding", "Billing support", "Front desk operations"],
+      access: ["Members", "Billing", "Payments", "QR", "Leads"],
+      attendance: 97,
+      performance: "Front desk and member support",
+      bio: "Front desk team member handling member onboarding, payment support, attendance coordination, and daily branch operations.",
+    },
   ],
   classes: [
     { id: "CLS-MON-01", day: "Monday", name: "Jiu Jitsu", coach: "Tarun Yadav", time: "8:00 AM", booked: 18, capacity: 24 },
