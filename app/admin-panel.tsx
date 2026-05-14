@@ -508,42 +508,42 @@ export default function AdminPanel({
   );
 
   const paymentsModule = (
-    <ModuleCard className="bg-slate-950 text-white">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Payment Collection</p>
-      <h2 className="mt-3 text-2xl font-black">Cash and Google Pay verification</h2>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+    <ModuleCard>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Payment Collection</p>
+      <h2 className="mt-3 text-2xl font-black text-slate-950">Cash and Google Pay verification</h2>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
         Record cash collections or verify a Google Pay payment screenshot before closing pending invoices. Razorpay can be added later as an online payment gateway.
       </p>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <div className="rounded-lg bg-white/10 p-4">
-          <p className="text-sm font-black text-white">Cash</p>
-          <p className="mt-2 text-xs leading-5 text-slate-300">Use for front-desk collections and manual receipt reconciliation.</p>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-black text-slate-950">Cash</p>
+          <p className="mt-2 text-xs leading-5 text-slate-600">Use for front-desk collections and manual receipt reconciliation.</p>
         </div>
-        <div className="rounded-lg bg-white/10 p-4">
-          <p className="text-sm font-black text-white">Google Pay screenshot</p>
-          <p className="mt-2 text-xs leading-5 text-slate-300">Use after matching the uploaded screenshot with invoice amount and member details.</p>
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm font-black text-slate-950">Google Pay screenshot</p>
+          <p className="mt-2 text-xs leading-5 text-slate-700">Use after matching the uploaded screenshot with invoice amount and member details.</p>
         </div>
-        <div className="rounded-lg border border-dashed border-white/25 p-4">
-          <p className="text-sm font-black text-slate-300">Razorpay</p>
-          <p className="mt-2 text-xs leading-5 text-slate-400">Future gateway integration, not active in the current payment flow.</p>
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4">
+          <p className="text-sm font-black text-slate-700">Razorpay</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">Future gateway integration, not active in the current payment flow.</p>
         </div>
       </div>
       <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {snapshot.invoices
           .filter((invoice) => invoice.status !== "paid")
           .map((invoice) => (
-            <div className="rounded-md bg-white/10 p-4 text-sm font-semibold" key={invoice.id}>
-              <span className="block text-white">{invoice.member}</span>
-              <span className="mt-1 block text-slate-300">{invoice.id} · {formatCurrency(invoice.amount + invoice.gst)}</span>
-              <span className="mt-1 block text-xs text-slate-400">Invoice mode: {invoice.paymentMode}</span>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold shadow-sm" key={invoice.id}>
+              <span className="block text-slate-950">{invoice.member}</span>
+              <span className="mt-1 block text-slate-600">{invoice.id} · {formatCurrency(invoice.amount + invoice.gst)}</span>
+              <span className="mt-1 block text-xs text-slate-500">Invoice mode: {invoice.paymentMode}</span>
               <div className="mt-4 grid gap-2">
-                <button className="rounded-md bg-emerald-400 px-3 py-2 text-left text-xs font-black text-slate-950 transition hover:bg-emerald-300" onClick={() => markInvoicePaid(invoice.id)} type="button">
+                <button className="rounded-md bg-slate-950 px-3 py-2 text-left text-xs font-black text-white transition hover:bg-slate-800" onClick={() => markInvoicePaid(invoice.id)} type="button">
                   Record cash payment
                 </button>
-                <button className="rounded-md border border-emerald-300/50 px-3 py-2 text-left text-xs font-black text-emerald-200 transition hover:bg-white/10" onClick={() => markInvoicePaid(invoice.id)} type="button">
+                <button className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-xs font-black text-emerald-800 transition hover:bg-emerald-100" onClick={() => markInvoicePaid(invoice.id)} type="button">
                   Verify Google Pay screenshot
                 </button>
-                <button className="rounded-md border border-white/15 px-3 py-2 text-left text-xs font-black text-slate-500" disabled type="button">
+                <button className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left text-xs font-black text-slate-400" disabled type="button">
                   Razorpay coming soon
                 </button>
               </div>
