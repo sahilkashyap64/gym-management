@@ -35,7 +35,7 @@ type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
 type ActiveModal = "member" | "staff" | "membership" | null;
 
-const storageKey = "crosstrain-admin-snapshot-v7";
+const storageKey = "crosstrain-admin-snapshot-v8";
 const moduleAccess = ["Members", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -82,6 +82,10 @@ function createId(prefix: string, count: number) {
 
 function membershipPlanLabel(plan: MembershipPlan) {
   return `${plan.category} ${plan.duration}`;
+}
+
+function isAssignableCoach(staff: StaffMember) {
+  return staff.role === "Trainer" || staff.role === "Owner";
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -176,7 +180,7 @@ function Modal({
 
 function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSnapshot): DashboardSnapshot {
   const attendance = Array.isArray(saved.attendance) ? saved.attendance : initialSnapshot.attendance;
-  const trainerNames = new Set((Array.isArray(saved.staff) ? saved.staff : initialSnapshot.staff).filter((staff) => staff.role === "Trainer").map((staff) => staff.name));
+  const trainerNames = new Set((Array.isArray(saved.staff) ? saved.staff : initialSnapshot.staff).filter(isAssignableCoach).map((staff) => staff.name));
   const members = (Array.isArray(saved.members) ? saved.members : initialSnapshot.members).map((member) => ({
     ...member,
     branch: member.branch ?? "Delhi Branch",
@@ -305,7 +309,7 @@ export default function AdminPanel({
   }, [snapshot]);
 
   const branchOptions = useMemo(() => snapshot.branches.map((branch) => branch.name), [snapshot.branches]);
-  const trainerOptions = useMemo(() => snapshot.staff.filter((staff) => staff.role === "Trainer").map((staff) => staff.name), [snapshot.staff]);
+  const trainerOptions = useMemo(() => snapshot.staff.filter(isAssignableCoach).map((staff) => staff.name), [snapshot.staff]);
   const activeMembershipPlans = useMemo(() => snapshot.membershipPlans.filter((plan) => plan.status === "active"), [snapshot.membershipPlans]);
   const pageTitle = routes.find((route) => route.key === module)?.label ?? "Overview";
 

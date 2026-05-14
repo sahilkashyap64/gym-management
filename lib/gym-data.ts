@@ -270,10 +270,10 @@ const dashboardSeed: DashboardSnapshot = {
     {
       id: "STF-01",
       name: "Siddharth Singh",
-      role: "Trainer",
+      role: "Owner",
       branch: "Delhi Branch",
       disciplines: ["MMA", "Brazilian Jiu-Jitsu", "Grappling", "Muay Thai"],
-      access: ["Members", "PT", "Plans"],
+      access: ["Members", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"],
       attendance: 96,
       performance: "Head coach and founder",
       bio: "First Indian competitive black belt in Brazilian Jiu-Jitsu, Gold Mongkol Master in Muay Thai, and founder of Crosstrain Fight Club.",
