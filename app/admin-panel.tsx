@@ -34,7 +34,7 @@ type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
 type ActiveModal = "member" | "staff" | null;
 
-const storageKey = "crosstrain-admin-snapshot-v5";
+const storageKey = "crosstrain-admin-snapshot-v6";
 const moduleAccess = ["Members", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -170,7 +170,12 @@ function Modal({
 
 function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSnapshot): DashboardSnapshot {
   const attendance = Array.isArray(saved.attendance) ? saved.attendance : initialSnapshot.attendance;
-  const members = Array.isArray(saved.members) ? saved.members : initialSnapshot.members;
+  const trainerNames = new Set((Array.isArray(saved.staff) ? saved.staff : initialSnapshot.staff).filter((staff) => staff.role === "Trainer").map((staff) => staff.name));
+  const members = (Array.isArray(saved.members) ? saved.members : initialSnapshot.members).map((member) => ({
+    ...member,
+    branch: member.branch ?? "Delhi Branch",
+    trainer: trainerNames.has(member.trainer) ? member.trainer : "Unassigned",
+  }));
   const invoices = Array.isArray(saved.invoices) ? saved.invoices : initialSnapshot.invoices;
   const membershipPlans = Array.isArray(saved.membershipPlans) ? saved.membershipPlans : initialSnapshot.membershipPlans;
   const branches = Array.isArray(saved.branches) ? saved.branches : initialSnapshot.branches;
@@ -219,6 +224,7 @@ export default function AdminPanel({
   const [memberForm, setMemberForm] = useState({
     name: "",
     phone: "",
+    branch: "Delhi Branch",
     plan: "Monthly Access",
     status: "active" as MemberStatus,
     expiry: "30 Jun 2026",
@@ -233,6 +239,7 @@ export default function AdminPanel({
   const [staffForm, setStaffForm] = useState({
     name: "",
     role: "Trainer" as StaffMember["role"],
+    branch: "Delhi Branch",
     access: ["Members", "PT", "Plans"],
   });
   const [classForm, setClassForm] = useState({
@@ -282,6 +289,8 @@ export default function AdminPanel({
     return { ...snapshot.metrics, activeMembers, dues, monthlyRevenue, leads, retention };
   }, [snapshot]);
 
+  const branchOptions = useMemo(() => snapshot.branches.map((branch) => branch.name), [snapshot.branches]);
+  const trainerOptions = useMemo(() => snapshot.staff.filter((staff) => staff.role === "Trainer").map((staff) => staff.name), [snapshot.staff]);
   const pageTitle = routes.find((route) => route.key === module)?.label ?? "Overview";
 
   function flash(message: string) {
@@ -328,6 +337,7 @@ export default function AdminPanel({
       id: createId("MBR", snapshot.members.length + 1100),
       name,
       phone: String(formData.get("phone") ?? ""),
+      branch: String(formData.get("branch") ?? "Delhi Branch"),
       plan: String(formData.get("plan") ?? "Monthly Access"),
       status: String(formData.get("status") ?? "active") as MemberStatus,
       expiry: String(formData.get("expiry") ?? "30 Jun 2026"),
@@ -336,7 +346,7 @@ export default function AdminPanel({
       trainer: String(formData.get("trainer") ?? "Unassigned"),
     };
     updateSnapshot((current) => ({ ...current, members: [member, ...current.members] }), "Member added");
-    setMemberForm({ ...memberForm, name: "", phone: "" });
+    setMemberForm({ ...memberForm, name: "", phone: "", trainer: "Unassigned" });
   }
 
   function updateMemberStatus(id: string, status: MemberStatus) {
@@ -350,6 +360,26 @@ export default function AdminPanel({
         ),
       }),
       "Member status updated",
+    );
+  }
+
+  function updateMemberBranch(id: string, branch: string) {
+    updateSnapshot(
+      (current) => ({
+        ...current,
+        members: current.members.map((member) => (member.id === id ? { ...member, branch } : member)),
+      }),
+      "Member branch updated",
+    );
+  }
+
+  function updateMemberTrainer(id: string, trainer: string) {
+    updateSnapshot(
+      (current) => ({
+        ...current,
+        members: current.members.map((member) => (member.id === id ? { ...member, trainer } : member)),
+      }),
+      "Member trainer updated",
     );
   }
 
@@ -430,7 +460,7 @@ export default function AdminPanel({
       id: createId("STF", snapshot.staff.length),
       name,
       role: String(formData.get("role") ?? "Trainer") as StaffMember["role"],
-      branch: "Delhi Branch",
+      branch: String(formData.get("branch") ?? "Delhi Branch"),
       disciplines: [String(formData.get("role") ?? "Trainer")],
       access: staffForm.access,
       attendance: 100,
@@ -439,6 +469,16 @@ export default function AdminPanel({
     };
     updateSnapshot((current) => ({ ...current, staff: [staff, ...current.staff] }), "Staff account created");
     setStaffForm({ ...staffForm, name: "" });
+  }
+
+  function updateStaffBranch(id: string, branch: string) {
+    updateSnapshot(
+      (current) => ({
+        ...current,
+        staff: current.staff.map((staff) => (staff.id === id ? { ...staff, branch } : staff)),
+      }),
+      "Staff branch updated",
+    );
   }
 
   function toggleStaffAccess(id: string, access: string) {
@@ -525,6 +565,7 @@ export default function AdminPanel({
           id: createId("MBR", current.members.length + 1100),
           name: lead.name,
           phone: "Pending",
+          branch: "Delhi Branch",
           plan: "Trial Converted",
           status: "active",
           expiry: "30 Jun 2026",
@@ -690,11 +731,12 @@ export default function AdminPanel({
         </button>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] text-left text-sm">
+        <table className="w-full min-w-[1040px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
             <tr>
               <th className="px-5 py-3">Member</th>
               <th className="px-5 py-3">Plan</th>
+              <th className="px-5 py-3">Branch</th>
               <th className="px-5 py-3">Trainer</th>
               <th className="px-5 py-3">Dues</th>
               <th className="px-5 py-3">Actions</th>
@@ -711,7 +753,21 @@ export default function AdminPanel({
                   <div className="font-semibold">{member.plan}</div>
                   <div className="text-xs text-slate-500">Expires {member.expiry}</div>
                 </td>
-                <td className="px-5 py-4 text-slate-600">{member.trainer}</td>
+                <td className="px-5 py-4">
+                  <select className="min-h-9 w-44 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700" onChange={(event) => updateMemberBranch(member.id, event.target.value)} value={member.branch}>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-5 py-4">
+                  <select className="min-h-9 w-44 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700" onChange={(event) => updateMemberTrainer(member.id, event.target.value)} value={member.trainer}>
+                    <option value="Unassigned">Unassigned</option>
+                    {trainerOptions.map((trainer) => (
+                      <option key={trainer} value={trainer}>{trainer}</option>
+                    ))}
+                  </select>
+                </td>
                 <td className="px-5 py-4">
                   <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusStyles[member.status]}`}>
                     {member.dues ? formatCurrency(member.dues) : member.status}
@@ -839,6 +895,15 @@ export default function AdminPanel({
                 <p className="text-sm text-slate-500">{staff.role} · {staff.branch}</p>
               </div>
               <p className="text-sm font-black text-emerald-700">{staff.attendance}%</p>
+            </div>
+            <div className="mt-3">
+              <Field label="Assigned branch">
+                <select className={inputClass} onChange={(event) => updateStaffBranch(staff.id, event.target.value)} value={staff.branch}>
+                  {branchOptions.map((branch) => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+              </Field>
             </div>
             <p className="mt-3 text-sm leading-6 text-slate-600">{staff.bio}</p>
             <div className="mt-3 flex flex-wrap gap-1">
@@ -1117,6 +1182,13 @@ export default function AdminPanel({
             <Field label="Phone">
               <input className={inputClass} name="phone" onChange={(event) => setMemberForm({ ...memberForm, phone: event.target.value })} placeholder="+91" value={memberForm.phone} />
             </Field>
+            <Field label="Branch">
+              <select className={inputClass} name="branch" onChange={(event) => setMemberForm({ ...memberForm, branch: event.target.value })} value={memberForm.branch}>
+                {branchOptions.map((branch) => (
+                  <option key={branch} value={branch}>{branch}</option>
+                ))}
+              </select>
+            </Field>
             <Field label="Plan">
               <input className={inputClass} name="plan" onChange={(event) => setMemberForm({ ...memberForm, plan: event.target.value })} value={memberForm.plan} />
             </Field>
@@ -1132,7 +1204,12 @@ export default function AdminPanel({
               <input className={inputClass} name="expiry" onChange={(event) => setMemberForm({ ...memberForm, expiry: event.target.value })} value={memberForm.expiry} />
             </Field>
             <Field label="Trainer">
-              <input className={inputClass} name="trainer" onChange={(event) => setMemberForm({ ...memberForm, trainer: event.target.value })} value={memberForm.trainer} />
+              <select className={inputClass} name="trainer" onChange={(event) => setMemberForm({ ...memberForm, trainer: event.target.value })} value={memberForm.trainer}>
+                <option value="Unassigned">Unassigned</option>
+                {trainerOptions.map((trainer) => (
+                  <option key={trainer} value={trainer}>{trainer}</option>
+                ))}
+              </select>
             </Field>
             <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
               <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">
@@ -1162,6 +1239,13 @@ export default function AdminPanel({
                 <option value="Manager">Manager</option>
                 <option value="Front Desk">Front Desk</option>
                 <option value="Owner">Owner</option>
+              </select>
+            </Field>
+            <Field label="Branch">
+              <select className={inputClass} name="branch" onChange={(event) => setStaffForm({ ...staffForm, branch: event.target.value })} value={staffForm.branch}>
+                {branchOptions.map((branch) => (
+                  <option key={branch} value={branch}>{branch}</option>
+                ))}
               </select>
             </Field>
             <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">

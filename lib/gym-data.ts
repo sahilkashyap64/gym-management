@@ -7,6 +7,7 @@ export type Member = {
   id: string;
   name: string;
   phone: string;
+  branch: string;
   plan: string;
   status: MemberStatus;
   expiry: string;
@@ -136,17 +137,19 @@ const dashboardSeed: DashboardSnapshot = {
       id: "MBR-86108",
       name: "Sahil Kashyap",
       phone: "+91 79822 19140",
+      branch: "Delhi Branch",
       plan: "VIP 12 Months",
       status: "active",
       expiry: "06 Oct 2026",
       dues: 0,
       lastCheckIn: "MMA package active",
-      trainer: "Aanand Thakur",
+      trainer: "Unassigned",
     },
     {
       id: "MBR-1048",
       name: "Aarav Sharma",
       phone: "+91 98765 41048",
+      branch: "Delhi Branch",
       plan: "Annual Strength",
       status: "active",
       expiry: "18 Aug 2026",
@@ -158,6 +161,7 @@ const dashboardSeed: DashboardSnapshot = {
       id: "MBR-1037",
       name: "Meera Iyer",
       phone: "+91 98765 41037",
+      branch: "Delhi Branch",
       plan: "Quarterly Plus",
       status: "due",
       expiry: "12 May 2026",
@@ -169,6 +173,7 @@ const dashboardSeed: DashboardSnapshot = {
       id: "MBR-1019",
       name: "Kabir Sethi",
       phone: "+91 98765 41019",
+      branch: "Noida Sector 58 Branch",
       plan: "Monthly Access",
       status: "paused",
       expiry: "26 Jun 2026",
