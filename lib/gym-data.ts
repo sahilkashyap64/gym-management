@@ -51,6 +51,14 @@ export type MembershipPlan = {
   price: number;
 };
 
+export type Branch = {
+  id: string;
+  name: string;
+  area: string;
+  city: string;
+  status: "active" | "launching";
+};
+
 export type Lead = {
   id: string;
   name: string;
@@ -81,6 +89,7 @@ export type DashboardSnapshot = {
   members: Member[];
   invoices: Invoice[];
   membershipPlans: MembershipPlan[];
+  branches: Branch[];
   staff: StaffMember[];
   classes: ClassSlot[];
   leads: Lead[];
@@ -212,6 +221,11 @@ const dashboardSeed: DashboardSnapshot = {
     { id: "MEM-2DAY-03", category: "2 Days a Week", duration: "3 Month", price: 14000 },
     { id: "MEM-2DAY-06", category: "2 Days a Week", duration: "6 Month", price: 25000 },
     { id: "MEM-2DAY-12", category: "2 Days a Week", duration: "12 Month", price: 40000 },
+  ],
+  branches: [
+    { id: "BR-DEL", name: "Delhi Branch", area: "Saket", city: "Delhi", status: "active" },
+    { id: "BR-NOI-58", name: "Noida Sector 58 Branch", area: "Sector 58", city: "Noida", status: "active" },
+    { id: "BR-FBD-28", name: "Faridabad Sector 28 Branch", area: "Sector 28", city: "Faridabad", status: "active" },
   ],
   staff: [
     {

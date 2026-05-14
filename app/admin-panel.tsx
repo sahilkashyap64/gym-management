@@ -33,7 +33,7 @@ type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
 
-const storageKey = "crosstrain-admin-snapshot-v2";
+const storageKey = "crosstrain-admin-snapshot-v3";
 const moduleAccess = ["Members", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -110,6 +110,7 @@ function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSna
     ...initialSnapshot,
     ...saved,
     membershipPlans: saved.membershipPlans ?? initialSnapshot.membershipPlans,
+    branches: saved.branches ?? initialSnapshot.branches,
     classes: (saved.classes ?? initialSnapshot.classes).map((slot) => ({
       ...slot,
       day: slot.day ?? "Monday",
@@ -959,6 +960,19 @@ export default function AdminPanel({
   const overviewModule = (
     <div className="grid gap-6">
       {metricCards}
+      <section className="grid gap-3 md:grid-cols-3">
+        {snapshot.branches.map((branch) => (
+          <ModuleCard className="p-4" key={branch.id}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-black">{branch.name}</p>
+                <p className="mt-1 text-sm text-slate-500">{branch.area}, {branch.city}</p>
+              </div>
+              <span className="rounded-md bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800">{branch.status}</span>
+            </div>
+          </ModuleCard>
+        ))}
+      </section>
       <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
         {reportsModule}
         {paymentsModule}
@@ -1011,6 +1025,14 @@ export default function AdminPanel({
               <p className="text-xs font-medium text-slate-500">Gym operations suite</p>
             </div>
           </Link>
+          <section className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Branches</p>
+            <div className="mt-3 grid gap-2">
+              {snapshot.branches.map((branch) => (
+                <p className="text-sm font-semibold text-slate-700" key={branch.id}>{branch.name}</p>
+              ))}
+            </div>
+          </section>
 
           <nav className="mt-8 grid gap-1">
             {routes.map((route) => (
