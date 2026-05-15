@@ -1859,7 +1859,6 @@ export default function AdminPanel({
           </header>
 
           <div className="mt-6 grid gap-6">
-            {module !== "overview" ? metricCards : null}
             {modules[module]}
           </div>
         </section>
