@@ -1,52 +1,183 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Crosstrain Gym Management
 
-## Getting Started
+Next.js admin dashboard for gym operations: members, memberships, billing, payments, attendance, classes, leads, staff, PT packages, reports, and diet/workout plans.
 
-First, run the development server:
+The app uses:
+
+- Next.js 16 App Router
+- React 19
+- Tailwind CSS 4
+- Prisma 6
+- PostgreSQL
+- Signed HTTP-only cookie login
+
+## Requirements
+
+- Node.js compatible with the installed Next/ESLint versions. Node 20 LTS or Node 22 LTS is recommended.
+- npm
+- PostgreSQL database URL
+
+## Environment
+
+Create `.env` from the example:
+
+```bash
+cp .env.example .env
+```
+
+Update these values:
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
+ADMIN_EMAIL="crosstrainfc@gmail.com"
+ADMIN_PASSWORD="change-this-password"
+AUTH_SECRET="replace-with-a-long-random-secret"
+```
+
+Notes:
+
+- `.env` is ignored by git.
+- `AUTH_SECRET` should be a long random string in production.
+- The local fallback login is `crosstrainfc@gmail.com / admin123`, but production should use explicit `.env` values.
+
+## Install
+
+```bash
+npm install
+npm run prisma:generate
+```
+
+## Database Setup
+
+Apply the Prisma schema:
+
+```bash
+npm run prisma:migrate -- --name init
+```
+
+Seed demo data:
+
+```bash
+npm run prisma:seed
+```
+
+The seed adds demo branches, users, staff, members, plans, memberships, invoices, payments, bookings, attendance, leads, diet plans, and PT packages.
+
+Demo login:
+
+```text
+crosstrainfc@gmail.com / admin123
+```
+
+Open Prisma Studio if you want to inspect or edit database rows:
+
+```bash
+npm run prisma:studio
+```
+
+## Development
+
+Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Unauthenticated users are redirected to `/login`. The dashboard currently still reads the UI snapshot from `lib/gym-data.ts`; the Prisma schema and seed are ready for wiring persistent CRUD into the UI.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev              # Start local Next dev server
+npm run build            # Production build
+npm run start            # Start production server after build
+npm run lint             # ESLint
+npm run prisma:generate  # Generate Prisma client
+npm run prisma:migrate   # Create/apply local migration
+npm run prisma:seed      # Load demo data
+npm run prisma:studio    # Open Prisma Studio
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Authentication
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Login is implemented with:
 
-## Deploy on Vercel
+- `app/login/page.tsx`
+- `app/api/login/route.ts`
+- `app/api/logout/route.ts`
+- `proxy.ts`
+- `lib/auth.ts`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The session is stored in a signed HTTP-only cookie. The proxy verifies the cookie signature and expiry before allowing access to dashboard pages.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For production:
 
+- Set `ADMIN_EMAIL`.
+- Set a strong `ADMIN_PASSWORD`.
+- Set a strong `AUTH_SECRET`.
+- Serve over HTTPS so secure cookies are used.
 
-## Deploy on GitHub Pages
+## Data Model
 
-This project is preconfigured for static export (`output: "export"`) and GitHub Pages deployment via GitHub Actions.
+Main Prisma models:
 
-1. Push your repository to GitHub.
-2. In GitHub, open **Settings → Pages**.
-3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-4. Push to `main` (or `master`) to trigger `.github/workflows/deploy.yml`.
+- `User` and `Session`
+- `Branch`
+- `Member`
+- `MembershipPlan`
+- `MemberMembership`
+- `Staff`
+- `ClassSlot` and `Booking`
+- `Attendance`
+- `Invoice` and `Payment`
+- `Lead`
+- `DietPlan`
+- `PtPackage`
 
-The workflow automatically:
-- installs dependencies,
-- builds the app with the correct Pages base path,
-- uploads the `out/` folder, and
-- deploys it to GitHub Pages.
+Schema file:
+
+```text
+prisma/schema.prisma
+```
+
+Seed file:
+
+```text
+prisma/seed.ts
+```
+
+## Deployment
+
+This app now needs a server runtime for login, logout, proxy auth, and future Prisma-backed routes. Use a platform that supports Next.js server routes, such as Vercel, Render, Railway, or a Node server.
+
+Build and start:
+
+```bash
+npm run build
+npm run start
+```
+
+Static export is still available only for a non-authenticated static preview:
+
+```bash
+STATIC_EXPORT=true npm run build
+```
+
+Do not use static export for the full app with login and database functionality.
+
+## Verification
+
+Useful checks before pushing:
+
+```bash
+npm run lint
+npx tsc --noEmit
+npm run build
+npm run prisma:generate
+```

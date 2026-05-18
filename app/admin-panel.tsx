@@ -1855,6 +1855,11 @@ export default function AdminPanel({
               >
                 Reset demo
               </button>
+              <form action="/api/logout" method="post">
+                <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" type="submit">
+                  Logout
+                </button>
+              </form>
             </div>
           </header>
 
