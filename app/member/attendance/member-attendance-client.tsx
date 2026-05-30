@@ -21,8 +21,8 @@ type ScannerInstance = {
     config: { fps: number; qrbox: { width: number; height: number } },
     onScanSuccess: (decodedText: string) => void,
     onScanFailure?: () => void,
-  ) => Promise<void>;
-  stop: () => Promise<void>;
+  ) => Promise<void | null>;
+  stop: () => Promise<void | null>;
   clear: () => void;
 };
 

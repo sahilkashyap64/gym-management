@@ -25,6 +25,7 @@ import {
   ensureDemoSnapshot,
   getTodayKey,
 } from "@/lib/demo-storage";
+import { getMembershipReminders, type MembershipReminder } from "@/lib/whatsapp-reminders";
 
 export type AdminModule =
   | "overview"
@@ -39,12 +40,20 @@ export type AdminModule =
   | "classes"
   | "leads"
   | "plans"
-  | "qr-attendance";
+  | "qr-attendance"
+  | "whatsapp-reminders";
 
 type PtPackage = DashboardSnapshot["ptPackages"][number];
 type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
+type ReminderResult = {
+  memberId: string;
+  memberName: string;
+  phone: string;
+  ok: boolean;
+  error?: string;
+};
 type ActiveModal =
   | "member"
   | "measurement"
@@ -95,6 +104,7 @@ const routes: Array<{ key: AdminModule; label: string; href: string }> = [
   { key: "leads", label: "Leads", href: "/leads" },
   { key: "plans", label: "Diet Plans", href: "/plans" },
   { key: "qr-attendance", label: "QR Attendance", href: "/qr-attendance" },
+  { key: "whatsapp-reminders", label: "WhatsApp Reminders", href: "/whatsapp-reminders" },
 ];
 
 const statusStyles: Record<MemberStatus | InvoiceStatus, string> = {
@@ -423,6 +433,11 @@ export default function AdminPanel({
   const [selectedQrBranch, setSelectedQrBranch] = useState(initialSnapshot.branches[0]?.name ?? "Delhi Branch");
   const [attendanceQrDataUrl, setAttendanceQrDataUrl] = useState("");
   const [attendanceQrError, setAttendanceQrError] = useState("");
+  const [reminderDaysWindow, setReminderDaysWindow] = useState("30");
+  const [selectedReminderIds, setSelectedReminderIds] = useState<string[]>([]);
+  const [reminderSending, setReminderSending] = useState(false);
+  const [reminderResults, setReminderResults] = useState<ReminderResult[]>([]);
+  const [reminderError, setReminderError] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -502,6 +517,14 @@ export default function AdminPanel({
     () => [...snapshot.attendanceLogs].sort((first, second) => Date.parse(second.checkedInAt) - Date.parse(first.checkedInAt)).slice(0, 8),
     [snapshot.attendanceLogs],
   );
+  const membershipReminders = useMemo(
+    () => getMembershipReminders(snapshot.members, Math.max(1, Number(reminderDaysWindow) || 30)),
+    [reminderDaysWindow, snapshot.members],
+  );
+  const selectedReminders = useMemo(
+    () => membershipReminders.filter((reminder) => selectedReminderIds.includes(reminder.memberId)),
+    [membershipReminders, selectedReminderIds],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -537,6 +560,45 @@ export default function AdminPanel({
   function updateSnapshot(updater: (current: DashboardSnapshot) => DashboardSnapshot, message: string) {
     setSnapshot((current) => updater(current));
     flash(message);
+  }
+
+  function toggleReminderSelection(memberId: string) {
+    setSelectedReminderIds((current) =>
+      current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId],
+    );
+  }
+
+  function setAllReminderSelections(reminders: MembershipReminder[]) {
+    setSelectedReminderIds(reminders.map((reminder) => reminder.memberId));
+  }
+
+  async function sendMembershipReminders() {
+    setReminderError("");
+    setReminderResults([]);
+    if (!selectedReminders.length) {
+      setReminderError("Select at least one member to send reminders.");
+      return;
+    }
+
+    setReminderSending(true);
+    try {
+      const response = await fetch("/api/whatsapp/membership-reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reminders: selectedReminders }),
+      });
+      const data = (await response.json()) as { error?: string; results?: ReminderResult[]; sent?: number; failed?: number };
+      if (!response.ok) {
+        setReminderError(data.error ?? "Unable to send WhatsApp reminders");
+        return;
+      }
+      setReminderResults(data.results ?? []);
+      flash(`${data.sent ?? 0} WhatsApp reminder${data.sent === 1 ? "" : "s"} sent`);
+    } catch {
+      setReminderError("Unable to reach the WhatsApp reminder API route.");
+    } finally {
+      setReminderSending(false);
+    }
   }
 
   function resetDemoData() {
@@ -1920,6 +1982,154 @@ export default function AdminPanel({
     </div>
   );
 
+  const whatsappRemindersModule = (
+    <div className="grid gap-6">
+      <ModuleCard>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">WhatsApp Business API</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">Membership expiry reminders</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Select members whose membership is expiring soon and send renewal reminders through the server-side WhatsApp API route.
+            </p>
+          </div>
+          <Field label="Expiring within">
+            <select className={`${inputClass} min-w-40`} onChange={(event) => setReminderDaysWindow(event.target.value)} value={reminderDaysWindow}>
+              <option value="7">7 days</option>
+              <option value="15">15 days</option>
+              <option value="30">30 days</option>
+              <option value="45">45 days</option>
+              <option value="60">60 days</option>
+            </select>
+          </Field>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Eligible members</p>
+            <p className="mt-3 text-3xl font-black">{membershipReminders.length}</p>
+            <p className="mt-1 text-sm text-slate-500">Expiring soon</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Selected</p>
+            <p className="mt-3 text-3xl font-black">{selectedReminders.length}</p>
+            <p className="mt-1 text-sm text-slate-500">Ready to send</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">API config</p>
+            <p className="mt-3 text-sm font-black">Server env required</p>
+            <p className="mt-1 text-sm text-slate-500">META_TOKEN + phone number ID</p>
+          </div>
+        </div>
+      </ModuleCard>
+
+      <ModuleCard className="p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
+          <div>
+            <h2 className="text-xl font-black">Reminder Queue</h2>
+            <p className="mt-1 text-sm text-slate-500">Preview message text before sending.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 disabled:opacity-50"
+              disabled={!membershipReminders.length}
+              onClick={() => setAllReminderSelections(membershipReminders)}
+              type="button"
+            >
+              Select all
+            </button>
+            <button
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800"
+              onClick={() => {
+                setSelectedReminderIds([]);
+                setReminderResults([]);
+                setReminderError("");
+              }}
+              type="button"
+            >
+              Clear
+            </button>
+            <button
+              className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+              disabled={reminderSending || !selectedReminders.length}
+              onClick={sendMembershipReminders}
+              type="button"
+            >
+              {reminderSending ? "Sending..." : "Send WhatsApp reminders"}
+            </button>
+          </div>
+        </div>
+
+        {reminderError ? <div className="m-5 rounded-md bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{reminderError}</div> : null}
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+              <tr>
+                <th className="px-5 py-3">Send</th>
+                <th className="px-5 py-3">Member</th>
+                <th className="px-5 py-3">Expiry</th>
+                <th className="px-5 py-3">Phone</th>
+                <th className="px-5 py-3">Message</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {membershipReminders.length ? (
+                membershipReminders.map((reminder) => (
+                  <tr key={reminder.memberId}>
+                    <td className="px-5 py-4">
+                      <input
+                        checked={selectedReminderIds.includes(reminder.memberId)}
+                        className={checkBoxClass}
+                        onChange={() => toggleReminderSelection(reminder.memberId)}
+                        type="checkbox"
+                      />
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="font-bold">{reminder.memberName}</div>
+                      <div className="text-xs text-slate-500">{reminder.plan}</div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className="font-semibold">{reminder.expiry}</span>
+                      <div className="text-xs text-slate-500">{reminder.daysUntilExpiry} days left</div>
+                    </td>
+                    <td className="px-5 py-4 font-semibold">+{reminder.phone}</td>
+                    <td className="px-5 py-4 text-sm leading-6 text-slate-600">{reminder.message}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="px-5 py-6 text-sm font-semibold text-slate-500" colSpan={5}>
+                    No members expire within the selected window.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </ModuleCard>
+
+      {reminderResults.length ? (
+        <ModuleCard>
+          <h2 className="text-xl font-black">Send Results</h2>
+          <div className="mt-4 grid gap-3">
+            {reminderResults.map((result) => (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-4 text-sm" key={`${result.memberId}-${result.phone}`}>
+                <div>
+                  <p className="font-bold text-slate-950">{result.memberName}</p>
+                  <p className="mt-1 text-xs text-slate-500">+{result.phone}</p>
+                </div>
+                <span className={`rounded-md px-2 py-1 text-xs font-bold ${result.ok ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
+                  {result.ok ? "sent" : result.error ?? "failed"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </ModuleCard>
+      ) : null}
+    </div>
+  );
+
   const overviewModule = (
     <div className="grid gap-6">
       {metricCards}
@@ -1974,6 +2184,7 @@ export default function AdminPanel({
     leads: leadsModule,
     plans: plansModule,
     "qr-attendance": qrModule,
+    "whatsapp-reminders": whatsappRemindersModule,
   };
 
   return (
