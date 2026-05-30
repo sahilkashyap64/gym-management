@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
+  BodyMeasurement,
   ClassSlot,
   DashboardSnapshot,
+  FormReviewStatus,
   Invoice,
   Lead,
+  MedicalHistoryForm,
   MembershipPlan,
   Member,
   MemberStatus,
+  ParqForm,
   PlanAssignment,
   StaffMember,
   Weekday,
@@ -18,6 +22,7 @@ import type {
 export type AdminModule =
   | "overview"
   | "members"
+  | "member-health"
   | "membership"
   | "billing"
   | "payments"
@@ -33,7 +38,21 @@ type PtPackage = DashboardSnapshot["ptPackages"][number];
 type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
-type ActiveModal = "member" | "staff" | "membership" | "invoice" | "class" | "lead" | "plan" | "pt" | "payment" | "confirm" | null;
+type ActiveModal =
+  | "member"
+  | "measurement"
+  | "parq"
+  | "medical"
+  | "staff"
+  | "membership"
+  | "invoice"
+  | "class"
+  | "lead"
+  | "plan"
+  | "pt"
+  | "payment"
+  | "confirm"
+  | null;
 type ConfirmDialog = {
   title: string;
   description: string;
@@ -42,15 +61,24 @@ type ConfirmDialog = {
   onConfirm: () => void;
 };
 
-const storageKey = "crosstrain-admin-snapshot-v8";
-const moduleAccess = ["Members", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
+const storageKey = "crosstrain-admin-snapshot-v9";
+const moduleAccess = ["Members", "Health", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const membershipCategories: MembershipPlan["category"][] = ["Regular", "3 Days a Week", "2 Days a Week"];
+const parqQuestions = [
+  "Heart condition or doctor-advised activity limits",
+  "Chest pain during physical activity",
+  "Dizziness, fainting, or loss of balance",
+  "Bone or joint problem",
+  "Blood pressure or heart medication",
+  "Other reason to avoid physical activity",
+];
 
 const routes: Array<{ key: AdminModule; label: string; href: string }> = [
   { key: "overview", label: "Overview", href: "/" },
   { key: "members", label: "Members", href: "/members" },
+  { key: "member-health", label: "Measurements & Forms", href: "/member-health" },
   { key: "membership", label: "Membership", href: "/membership" },
   { key: "billing", label: "Billing", href: "/billing" },
   { key: "payments", label: "Payments", href: "/payments" },
@@ -74,6 +102,7 @@ const statusStyles: Record<MemberStatus | InvoiceStatus, string> = {
 
 const inputClass =
   "min-h-10 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100";
+const checkBoxClass = "size-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-500";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -87,8 +116,47 @@ function createId(prefix: string, count: number) {
   return `${prefix}-${String(count + 1).padStart(4, "0")}`;
 }
 
+function formatToday() {
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date());
+}
+
 function membershipPlanLabel(plan: MembershipPlan) {
   return `${plan.category} ${plan.duration}`;
+}
+
+function calculateBmi(heightCm: number, weightKg: number) {
+  const heightM = heightCm / 100;
+  return heightM ? Number((weightKg / (heightM * heightM)).toFixed(1)) : 0;
+}
+
+function calculateBmr(heightCm: number, weightKg: number, age: number, sex: BodyMeasurement["sex"]) {
+  const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
+  return Math.round(sex === "male" ? base + 5 : base - 161);
+}
+
+function getMemberMeasurements(snapshot: DashboardSnapshot, memberName: string) {
+  return snapshot.measurements.filter((entry) => entry.member === memberName);
+}
+
+function getLatestMeasurement(snapshot: DashboardSnapshot, memberName: string) {
+  return getMemberMeasurements(snapshot, memberName).at(-1);
+}
+
+function getPreviousMeasurement(snapshot: DashboardSnapshot, memberName: string) {
+  const entries = getMemberMeasurements(snapshot, memberName);
+  return entries.length > 1 ? entries.at(-2) : undefined;
+}
+
+function getLatestParq(snapshot: DashboardSnapshot, memberName: string) {
+  return snapshot.parqForms.filter((form) => form.member === memberName).at(-1);
+}
+
+function getLatestMedicalHistory(snapshot: DashboardSnapshot, memberName: string) {
+  return snapshot.medicalHistoryForms.filter((form) => form.member === memberName).at(-1);
+}
+
+function reviewStatusStyles(status: FormReviewStatus) {
+  return status === "clear" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800";
 }
 
 function isAssignableCoach(staff: StaffMember) {
@@ -203,6 +271,11 @@ function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSna
   const classes = Array.isArray(saved.classes) ? saved.classes : initialSnapshot.classes;
   const leads = Array.isArray(saved.leads) ? saved.leads : initialSnapshot.leads;
   const plans = Array.isArray(saved.plans) ? saved.plans : initialSnapshot.plans;
+  const measurements = Array.isArray(saved.measurements) ? saved.measurements : initialSnapshot.measurements;
+  const parqForms = Array.isArray(saved.parqForms) ? saved.parqForms : initialSnapshot.parqForms;
+  const medicalHistoryForms = Array.isArray(saved.medicalHistoryForms)
+    ? saved.medicalHistoryForms
+    : initialSnapshot.medicalHistoryForms;
   const ptPackages = Array.isArray(saved.ptPackages) ? saved.ptPackages : initialSnapshot.ptPackages;
 
   return {
@@ -215,6 +288,9 @@ function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSna
     branches,
     leads,
     plans,
+    measurements,
+    parqForms,
+    medicalHistoryForms,
     ptPackages,
     staff: staff.map((staff) => ({
       ...staff,
@@ -298,6 +374,31 @@ export default function AdminPanel({
     paymentMode: "Cash" as Invoice["paymentMode"],
     reference: "",
   });
+  const [selectedHealthMember, setSelectedHealthMember] = useState(initialSnapshot.members[0]?.name ?? "");
+  const [measurementForm, setMeasurementForm] = useState({
+    member: initialSnapshot.members[0]?.name ?? "",
+    heightCm: "175",
+    weightKg: "78",
+    age: "30",
+    sex: "male" as BodyMeasurement["sex"],
+    chestCm: "100",
+    waistCm: "86",
+    hipCm: "98",
+    bodyFatPercent: "20",
+  });
+  const [parqForm, setParqForm] = useState({
+    member: initialSnapshot.members[0]?.name ?? "",
+    yesAnswers: [] as string[],
+    notes: "",
+  });
+  const [medicalForm, setMedicalForm] = useState({
+    member: initialSnapshot.members[0]?.name ?? "",
+    conditions: "",
+    allergies: "",
+    medications: "",
+    emergencyContact: "",
+    notes: "",
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -331,6 +432,18 @@ export default function AdminPanel({
   const trainerOptions = useMemo(() => snapshot.staff.filter(isAssignableCoach).map((staff) => staff.name), [snapshot.staff]);
   const activeMembershipPlans = useMemo(() => snapshot.membershipPlans.filter((plan) => plan.status === "active"), [snapshot.membershipPlans]);
   const pageTitle = routes.find((route) => route.key === module)?.label ?? "Overview";
+  const selectedMemberProfile = useMemo(
+    () => snapshot.members.find((member) => member.name === selectedHealthMember) ?? snapshot.members[0],
+    [selectedHealthMember, snapshot.members],
+  );
+  const selectedMeasurements = useMemo(
+    () => (selectedMemberProfile ? getMemberMeasurements(snapshot, selectedMemberProfile.name) : []),
+    [selectedMemberProfile, snapshot],
+  );
+  const selectedLatestMeasurement = selectedMemberProfile ? getLatestMeasurement(snapshot, selectedMemberProfile.name) : undefined;
+  const selectedPreviousMeasurement = selectedMemberProfile ? getPreviousMeasurement(snapshot, selectedMemberProfile.name) : undefined;
+  const selectedLatestParq = selectedMemberProfile ? getLatestParq(snapshot, selectedMemberProfile.name) : undefined;
+  const selectedLatestMedical = selectedMemberProfile ? getLatestMedicalHistory(snapshot, selectedMemberProfile.name) : undefined;
 
   function flash(message: string) {
     toastId.current += 1;
@@ -394,6 +507,24 @@ export default function AdminPanel({
     setActiveModal(null);
   }
 
+  function submitMeasurementModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    addMeasurement(new FormData(event.currentTarget));
+    setActiveModal(null);
+  }
+
+  function submitParqModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    addParqForm(new FormData(event.currentTarget));
+    setActiveModal(null);
+  }
+
+  function submitMedicalModal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    addMedicalHistoryForm(new FormData(event.currentTarget));
+    setActiveModal(null);
+  }
+
   function submitMemberModal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -452,6 +583,40 @@ export default function AdminPanel({
     setActiveModal("payment");
   }
 
+  function openMeasurementModal(memberName = selectedHealthMember) {
+    const latest = getLatestMeasurement(snapshot, memberName);
+    setMeasurementForm({
+      member: memberName,
+      heightCm: String(latest?.heightCm ?? 175),
+      weightKg: String(latest?.weightKg ?? 78),
+      age: String(latest?.age ?? 30),
+      sex: latest?.sex ?? "male",
+      chestCm: String(latest?.chestCm ?? 100),
+      waistCm: String(latest?.waistCm ?? 86),
+      hipCm: String(latest?.hipCm ?? 98),
+      bodyFatPercent: String(latest?.bodyFatPercent ?? 20),
+    });
+    setActiveModal("measurement");
+  }
+
+  function openParqModal(memberName = selectedHealthMember) {
+    setParqForm({ member: memberName, yesAnswers: [], notes: "" });
+    setActiveModal("parq");
+  }
+
+  function openMedicalModal(memberName = selectedHealthMember) {
+    const latest = getLatestMedicalHistory(snapshot, memberName);
+    setMedicalForm({
+      member: memberName,
+      conditions: latest?.conditions.join(", ") ?? "",
+      allergies: latest?.allergies ?? "",
+      medications: latest?.medications ?? "",
+      emergencyContact: latest?.emergencyContact ?? "",
+      notes: "",
+    });
+    setActiveModal("medical");
+  }
+
   function addMember(formData: FormData) {
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return;
@@ -503,6 +668,72 @@ export default function AdminPanel({
       }),
       "Member trainer updated",
     );
+  }
+
+  function addMeasurement(formData: FormData) {
+    const member = String(formData.get("member") ?? "");
+    const heightCm = Number(formData.get("heightCm") ?? 0);
+    const weightKg = Number(formData.get("weightKg") ?? 0);
+    const age = Number(formData.get("age") ?? 0);
+    const sex = String(formData.get("sex") ?? "male") as BodyMeasurement["sex"];
+    if (!member || !heightCm || !weightKg || !age) return;
+    const measurement: BodyMeasurement = {
+      id: createId("MSR", snapshot.measurements.length + 240),
+      member,
+      recordedOn: formatToday(),
+      heightCm,
+      weightKg,
+      age,
+      sex,
+      chestCm: Number(formData.get("chestCm") ?? 0),
+      waistCm: Number(formData.get("waistCm") ?? 0),
+      hipCm: Number(formData.get("hipCm") ?? 0),
+      bodyFatPercent: Number(formData.get("bodyFatPercent") ?? 0),
+      bmi: calculateBmi(heightCm, weightKg),
+      bmr: calculateBmr(heightCm, weightKg, age, sex),
+    };
+    updateSnapshot((current) => ({ ...current, measurements: [...current.measurements, measurement] }), "Measurement added from member app");
+    setSelectedHealthMember(member);
+  }
+
+  function addParqForm(formData: FormData) {
+    const member = String(formData.get("member") ?? "");
+    if (!member) return;
+    const yesAnswers = formData.getAll("yesAnswers").map(String);
+    const form: ParqForm = {
+      id: createId("PARQ", snapshot.parqForms.length + 130),
+      member,
+      submittedOn: formatToday(),
+      status: yesAnswers.length ? "review" : "clear",
+      yesAnswers,
+      notes: String(formData.get("notes") ?? "").trim() || (yesAnswers.length ? "Review before intense training." : "No restrictions reported."),
+    };
+    updateSnapshot((current) => ({ ...current, parqForms: [...current.parqForms, form] }), "PAR-Q form submitted");
+    setSelectedHealthMember(member);
+  }
+
+  function addMedicalHistoryForm(formData: FormData) {
+    const member = String(formData.get("member") ?? "");
+    if (!member) return;
+    const conditions = String(formData.get("conditions") ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const allergies = String(formData.get("allergies") ?? "").trim();
+    const medications = String(formData.get("medications") ?? "").trim();
+    const form: MedicalHistoryForm = {
+      id: createId("MED", snapshot.medicalHistoryForms.length + 125),
+      member,
+      submittedOn: formatToday(),
+      status: conditions.length || allergies || medications ? "review" : "clear",
+      conditions: conditions.length ? conditions : ["None"],
+      allergies: allergies || "None",
+      medications: medications || "None",
+      emergencyContact: String(formData.get("emergencyContact") ?? "").trim() || "Not provided",
+      notes: String(formData.get("notes") ?? "").trim() || "Submitted from member app.",
+    };
+    updateSnapshot((current) => ({ ...current, medicalHistoryForms: [...current.medicalHistoryForms, form] }), "Medical history submitted");
+    setSelectedHealthMember(member);
   }
 
   function addInvoice(formData: FormData) {
@@ -918,26 +1149,32 @@ export default function AdminPanel({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5">
         <div>
           <h2 className="text-xl font-black">Member Management</h2>
-          <p className="mt-1 text-sm text-slate-500">Profiles, subscriptions, dues, and PT assignment.</p>
+          <p className="mt-1 text-sm text-slate-500">Profiles, subscriptions, dues, PT assignment, measurements, and forms.</p>
         </div>
         <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => setActiveModal("member")} type="button">
           Add member
         </button>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1040px] text-left text-sm">
+        <table className="w-full min-w-[1240px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
             <tr>
               <th className="px-5 py-3">Member</th>
               <th className="px-5 py-3">Plan</th>
               <th className="px-5 py-3">Branch</th>
               <th className="px-5 py-3">Trainer</th>
+              <th className="px-5 py-3">Wellness</th>
               <th className="px-5 py-3">Dues</th>
               <th className="px-5 py-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {snapshot.members.map((member) => (
+            {snapshot.members.map((member) => {
+              const latestMeasurement = getLatestMeasurement(snapshot, member.name);
+              const latestParq = getLatestParq(snapshot, member.name);
+              const latestMedical = getLatestMedicalHistory(snapshot, member.name);
+              const needsReview = latestParq?.status === "review" || latestMedical?.status === "review";
+              return (
               <tr key={member.id}>
                 <td className="px-5 py-4">
                   <div className="font-bold">{member.name}</div>
@@ -963,6 +1200,22 @@ export default function AdminPanel({
                   </select>
                 </td>
                 <td className="px-5 py-4">
+                  <div className="grid gap-1">
+                    <div className="text-xs font-bold text-slate-700">
+                      {latestMeasurement ? `BMI ${latestMeasurement.bmi} · BMR ${latestMeasurement.bmr}` : "No measurements"}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <span className={`rounded-md px-2 py-1 text-[11px] font-bold ${latestParq ? reviewStatusStyles(latestParq.status) : "bg-slate-100 text-slate-600"}`}>
+                        PAR-Q {latestParq?.status ?? "pending"}
+                      </span>
+                      <span className={`rounded-md px-2 py-1 text-[11px] font-bold ${latestMedical ? reviewStatusStyles(latestMedical.status) : "bg-slate-100 text-slate-600"}`}>
+                        Medical {latestMedical?.status ?? "pending"}
+                      </span>
+                    </div>
+                    {needsReview ? <p className="text-xs font-semibold text-amber-700">Coach review needed</p> : null}
+                  </div>
+                </td>
+                <td className="px-5 py-4">
                   <span className={`rounded-md px-2 py-1 text-xs font-bold ${statusStyles[member.status]}`}>
                     {member.dues ? formatCurrency(member.dues) : member.status}
                   </span>
@@ -973,14 +1226,180 @@ export default function AdminPanel({
                     <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => updateMemberStatus(member.id, "paused")} type="button">Pause</button>
                     <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => updateMemberStatus(member.id, "due")} type="button">Mark due</button>
                     <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => openPtModal(member)} type="button">Add PT</button>
+                    <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => openMeasurementModal(member.name)} type="button">Measure</button>
+                    <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => openParqModal(member.name)} type="button">PAR-Q</button>
+                    <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-bold" onClick={() => openMedicalModal(member.name)} type="button">Medical</button>
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
     </ModuleCard>
+  );
+
+  const measurementProgress = selectedLatestMeasurement && selectedPreviousMeasurement
+    ? [
+        { label: "Weight", value: selectedLatestMeasurement.weightKg, previous: selectedPreviousMeasurement.weightKg, suffix: "kg" },
+        { label: "Waist", value: selectedLatestMeasurement.waistCm, previous: selectedPreviousMeasurement.waistCm, suffix: "cm" },
+        { label: "Body fat", value: selectedLatestMeasurement.bodyFatPercent, previous: selectedPreviousMeasurement.bodyFatPercent, suffix: "%" },
+      ]
+    : [];
+
+  const memberHealthModule = (
+    <div className="grid gap-6">
+      <ModuleCard>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Member app intake</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">Measurements, PAR-Q and medical history</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Admin view of member-submitted measurements, BMI, BMR, PAR-Q answers, and medical history forms.
+            </p>
+          </div>
+          <Field label="Member">
+            <select
+              className={`${inputClass} min-w-64`}
+              onChange={(event) => setSelectedHealthMember(event.target.value)}
+              value={selectedMemberProfile?.name ?? ""}
+            >
+              {snapshot.members.map((member) => (
+                <option key={member.id} value={member.name}>{member.name}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" onClick={() => openMeasurementModal(selectedMemberProfile?.name)} type="button">
+            Add measurement
+          </button>
+          <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => openParqModal(selectedMemberProfile?.name)} type="button">
+            Fill PAR-Q
+          </button>
+          <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => openMedicalModal(selectedMemberProfile?.name)} type="button">
+            Fill medical history
+          </button>
+        </div>
+      </ModuleCard>
+
+      <section className="grid gap-4 lg:grid-cols-4">
+        {[
+          ["Latest BMI", selectedLatestMeasurement?.bmi ?? "Pending", selectedLatestMeasurement ? "Calculated from latest entry" : "Add measurements"],
+          ["Latest BMR", selectedLatestMeasurement ? `${selectedLatestMeasurement.bmr} kcal` : "Pending", "Daily resting burn estimate"],
+          ["PAR-Q", selectedLatestParq?.status ?? "Pending", selectedLatestParq ? `Submitted ${selectedLatestParq.submittedOn}` : "No form submitted"],
+          ["Medical history", selectedLatestMedical?.status ?? "Pending", selectedLatestMedical ? `Submitted ${selectedLatestMedical.submittedOn}` : "No form submitted"],
+        ].map(([label, value, helper]) => (
+          <ModuleCard className="p-4" key={label}>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+            <p className="mt-3 text-2xl font-black capitalize">{value}</p>
+            <p className="mt-1 text-sm text-slate-500">{helper}</p>
+          </ModuleCard>
+        ))}
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <ModuleCard>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black">Measurement Progress</h2>
+              <p className="mt-1 text-sm text-slate-500">Member-entered body measurements over time.</p>
+            </div>
+            <span className="rounded-md bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-800">{selectedMeasurements.length} entries</span>
+          </div>
+          {selectedMeasurements.length ? (
+            <div className="mt-5 grid gap-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                {measurementProgress.map((item) => {
+                  const delta = Number((item.value - item.previous).toFixed(1));
+                  const improved = delta <= 0;
+                  return (
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4" key={item.label}>
+                      <p className="text-xs font-bold text-slate-500">{item.label}</p>
+                      <p className="mt-2 text-xl font-black">{item.value}{item.suffix}</p>
+                      <p className={`mt-1 text-xs font-bold ${improved ? "text-emerald-700" : "text-amber-700"}`}>
+                        {delta > 0 ? "+" : ""}{delta}{item.suffix} since previous
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Weight</th>
+                      <th className="px-4 py-3">Chest</th>
+                      <th className="px-4 py-3">Waist</th>
+                      <th className="px-4 py-3">Hip</th>
+                      <th className="px-4 py-3">Body fat</th>
+                      <th className="px-4 py-3">BMI / BMR</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedMeasurements.map((entry) => (
+                      <tr key={entry.id}>
+                        <td className="px-4 py-3 font-semibold">{entry.recordedOn}</td>
+                        <td className="px-4 py-3">{entry.weightKg}kg</td>
+                        <td className="px-4 py-3">{entry.chestCm}cm</td>
+                        <td className="px-4 py-3">{entry.waistCm}cm</td>
+                        <td className="px-4 py-3">{entry.hipCm}cm</td>
+                        <td className="px-4 py-3">{entry.bodyFatPercent}%</td>
+                        <td className="px-4 py-3">{entry.bmi} / {entry.bmr}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5 text-sm font-semibold text-slate-600">
+              No measurement entries yet.
+            </div>
+          )}
+        </ModuleCard>
+
+        <ModuleCard>
+          <h2 className="text-xl font-black">Form Review</h2>
+          <div className="mt-5 grid gap-4">
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-black">PAR-Q</p>
+                  <p className="mt-1 text-sm text-slate-500">{selectedLatestParq?.submittedOn ?? "Not submitted"}</p>
+                </div>
+                <span className={`rounded-md px-2 py-1 text-xs font-bold ${selectedLatestParq ? reviewStatusStyles(selectedLatestParq.status) : "bg-slate-100 text-slate-600"}`}>
+                  {selectedLatestParq?.status ?? "pending"}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                {selectedLatestParq?.yesAnswers.length ? selectedLatestParq.yesAnswers.join(", ") : "No yes answers recorded."}
+              </p>
+              <p className="mt-2 text-xs font-semibold text-slate-500">{selectedLatestParq?.notes ?? "Member can submit this from the app."}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-black">Medical History</p>
+                  <p className="mt-1 text-sm text-slate-500">{selectedLatestMedical?.submittedOn ?? "Not submitted"}</p>
+                </div>
+                <span className={`rounded-md px-2 py-1 text-xs font-bold ${selectedLatestMedical ? reviewStatusStyles(selectedLatestMedical.status) : "bg-slate-100 text-slate-600"}`}>
+                  {selectedLatestMedical?.status ?? "pending"}
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 text-sm text-slate-600">
+                <p><span className="font-bold text-slate-800">Conditions:</span> {selectedLatestMedical?.conditions.join(", ") ?? "Pending"}</p>
+                <p><span className="font-bold text-slate-800">Allergies:</span> {selectedLatestMedical?.allergies ?? "Pending"}</p>
+                <p><span className="font-bold text-slate-800">Medications:</span> {selectedLatestMedical?.medications ?? "Pending"}</p>
+                <p><span className="font-bold text-slate-800">Emergency:</span> {selectedLatestMedical?.emergencyContact ?? "Pending"}</p>
+              </div>
+            </div>
+          </div>
+        </ModuleCard>
+      </section>
+    </div>
   );
 
   const billingModule = (
@@ -1376,9 +1795,10 @@ export default function AdminPanel({
         {reportsModule}
         {paymentsModule}
       </section>
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {[
           ["Member Management", "Profiles, subscriptions, dues, and PT assignment."],
+          ["Member Wellness", "Measurements, BMI, BMR, PAR-Q, and medical history."],
           ["Billing & GST", "Invoices, GST totals, payments, and dues."],
           ["Staff", "Accounts, roles, permissions, attendance, performance."],
           ["Classes & Leads", "Capacity, bookings, follow-ups, conversion."],
@@ -1396,6 +1816,7 @@ export default function AdminPanel({
   const modules: Record<AdminModule, React.ReactNode> = {
     overview: overviewModule,
     members: membersModule,
+    "member-health": memberHealthModule,
     membership: membershipModule,
     billing: billingModule,
     payments: paymentsModule,
@@ -1471,6 +1892,148 @@ export default function AdminPanel({
               <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" data-testid="add-member" type="submit">
                 Add member
               </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "measurement" ? (
+        <Modal
+          description="Member-facing body measurement entry. BMI and BMR are calculated automatically for the admin record."
+          onClose={() => setActiveModal(null)}
+          title="Add body measurement"
+        >
+          <form className="grid gap-4 md:grid-cols-4" onSubmit={submitMeasurementModal}>
+            <Field label="Member">
+              <select className={inputClass} name="member" onChange={(event) => setMeasurementForm({ ...measurementForm, member: event.target.value })} value={measurementForm.member}>
+                {snapshot.members.map((member) => (
+                  <option key={member.id} value={member.name}>{member.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Sex">
+              <select className={inputClass} name="sex" onChange={(event) => setMeasurementForm({ ...measurementForm, sex: event.target.value as BodyMeasurement["sex"] })} value={measurementForm.sex}>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </Field>
+            <Field label="Age">
+              <input className={inputClass} inputMode="numeric" name="age" onChange={(event) => setMeasurementForm({ ...measurementForm, age: event.target.value })} value={measurementForm.age} />
+            </Field>
+            <Field label="Height cm">
+              <input className={inputClass} inputMode="decimal" name="heightCm" onChange={(event) => setMeasurementForm({ ...measurementForm, heightCm: event.target.value })} value={measurementForm.heightCm} />
+            </Field>
+            <Field label="Weight kg">
+              <input className={inputClass} inputMode="decimal" name="weightKg" onChange={(event) => setMeasurementForm({ ...measurementForm, weightKg: event.target.value })} value={measurementForm.weightKg} />
+            </Field>
+            <Field label="Chest cm">
+              <input className={inputClass} inputMode="decimal" name="chestCm" onChange={(event) => setMeasurementForm({ ...measurementForm, chestCm: event.target.value })} value={measurementForm.chestCm} />
+            </Field>
+            <Field label="Waist cm">
+              <input className={inputClass} inputMode="decimal" name="waistCm" onChange={(event) => setMeasurementForm({ ...measurementForm, waistCm: event.target.value })} value={measurementForm.waistCm} />
+            </Field>
+            <Field label="Hip cm">
+              <input className={inputClass} inputMode="decimal" name="hipCm" onChange={(event) => setMeasurementForm({ ...measurementForm, hipCm: event.target.value })} value={measurementForm.hipCm} />
+            </Field>
+            <Field label="Body fat %">
+              <input className={inputClass} inputMode="decimal" name="bodyFatPercent" onChange={(event) => setMeasurementForm({ ...measurementForm, bodyFatPercent: event.target.value })} value={measurementForm.bodyFatPercent} />
+            </Field>
+            <div className="rounded-lg bg-slate-50 p-4 md:col-span-3">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Calculated preview</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <p className="text-sm font-bold text-slate-800">BMI {calculateBmi(Number(measurementForm.heightCm), Number(measurementForm.weightKg))}</p>
+                <p className="text-sm font-bold text-slate-800">
+                  BMR {calculateBmr(Number(measurementForm.heightCm), Number(measurementForm.weightKg), Number(measurementForm.age), measurementForm.sex)} kcal
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-4 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Save measurement</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "parq" ? (
+        <Modal
+          description="Member-facing PAR-Q fitness readiness form. Any yes answer flags the profile for coach review."
+          onClose={() => setActiveModal(null)}
+          title="Fill PAR-Q form"
+        >
+          <form className="grid gap-4" onSubmit={submitParqModal}>
+            <Field label="Member">
+              <select className={inputClass} name="member" onChange={(event) => setParqForm({ ...parqForm, member: event.target.value })} value={parqForm.member}>
+                {snapshot.members.map((member) => (
+                  <option key={member.id} value={member.name}>{member.name}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid gap-2">
+              {parqQuestions.map((question) => (
+                <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700" key={question}>
+                  <input
+                    checked={parqForm.yesAnswers.includes(question)}
+                    className={checkBoxClass}
+                    name="yesAnswers"
+                    onChange={(event) =>
+                      setParqForm((current) => ({
+                        ...current,
+                        yesAnswers: event.target.checked
+                          ? [...current.yesAnswers, question]
+                          : current.yesAnswers.filter((item) => item !== question),
+                      }))
+                    }
+                    type="checkbox"
+                    value={question}
+                  />
+                  <span>{question}</span>
+                </label>
+              ))}
+            </div>
+            <Field label="Notes">
+              <textarea className={`${inputClass} min-h-24 resize-y`} name="notes" onChange={(event) => setParqForm({ ...parqForm, notes: event.target.value })} value={parqForm.notes} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Submit PAR-Q</button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {activeModal === "medical" ? (
+        <Modal
+          description="Member-facing medical history form. Submitted conditions, allergies, and medications are visible to admins and coaches."
+          onClose={() => setActiveModal(null)}
+          title="Fill medical history"
+        >
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submitMedicalModal}>
+            <Field label="Member">
+              <select className={inputClass} name="member" onChange={(event) => setMedicalForm({ ...medicalForm, member: event.target.value })} value={medicalForm.member}>
+                {snapshot.members.map((member) => (
+                  <option key={member.id} value={member.name}>{member.name}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Emergency contact">
+              <input className={inputClass} name="emergencyContact" onChange={(event) => setMedicalForm({ ...medicalForm, emergencyContact: event.target.value })} placeholder="Name, phone" value={medicalForm.emergencyContact} />
+            </Field>
+            <Field label="Conditions">
+              <input className={inputClass} name="conditions" onChange={(event) => setMedicalForm({ ...medicalForm, conditions: event.target.value })} placeholder="Comma-separated, if any" value={medicalForm.conditions} />
+            </Field>
+            <Field label="Allergies">
+              <input className={inputClass} name="allergies" onChange={(event) => setMedicalForm({ ...medicalForm, allergies: event.target.value })} placeholder="None" value={medicalForm.allergies} />
+            </Field>
+            <Field label="Medications">
+              <input className={inputClass} name="medications" onChange={(event) => setMedicalForm({ ...medicalForm, medications: event.target.value })} placeholder="None" value={medicalForm.medications} />
+            </Field>
+            <Field label="Notes">
+              <textarea className={`${inputClass} min-h-24 resize-y`} name="notes" onChange={(event) => setMedicalForm({ ...medicalForm, notes: event.target.value })} value={medicalForm.notes} />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 md:col-span-2 md:flex-row md:justify-end">
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setActiveModal(null)} type="button">Cancel</button>
+              <button className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" type="submit">Submit medical history</button>
             </div>
           </form>
         </Modal>

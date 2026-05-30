@@ -39,3 +39,40 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# This gitignore file is used only internally for this repository,
+# you should not use this in your own projects. Instead, navigate into
+# an example folder and use the folder as the project root (it also contains a
+# projects-specific .gitignore).
+
+node_modules/
+generated/
+yarn-error.log/
+vendor/
+tmp/
+dist/
+.DS_Store
+.idea
+tmp-resolvers
+package-lock.json
+flow-typed
+yarn.lock
+bun.lock
+pnpm-lock.yaml
+orm/**/migrations/
+misc/**/migrations/
+databases/**/migrations/
+orm/**/package-lock.json
+misc/**/package-lock.json
+experimental/**/package-lock.json
+.output/
+
+databases/**/package-lock.json
+experimental/**/*.db
+.next
+.vscode/
+.nuxt
+dev.db
+*.env*
+!.env.example

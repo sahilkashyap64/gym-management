@@ -2,6 +2,7 @@ export type MemberStatus = "active" | "due" | "paused" | "lead";
 export type StaffRole = "Owner" | "Manager" | "Trainer" | "Front Desk";
 export type AttendanceTrend = "up" | "steady" | "down";
 export type Weekday = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
+export type FormReviewStatus = "clear" | "review";
 
 export type Member = {
   id: string;
@@ -84,6 +85,43 @@ export type PlanAssignment = {
   adherence: number;
 };
 
+export type BodyMeasurement = {
+  id: string;
+  member: string;
+  recordedOn: string;
+  heightCm: number;
+  weightKg: number;
+  age: number;
+  sex: "male" | "female";
+  chestCm: number;
+  waistCm: number;
+  hipCm: number;
+  bodyFatPercent: number;
+  bmi: number;
+  bmr: number;
+};
+
+export type ParqForm = {
+  id: string;
+  member: string;
+  submittedOn: string;
+  status: FormReviewStatus;
+  yesAnswers: string[];
+  notes: string;
+};
+
+export type MedicalHistoryForm = {
+  id: string;
+  member: string;
+  submittedOn: string;
+  status: FormReviewStatus;
+  conditions: string[];
+  allergies: string;
+  medications: string;
+  emergencyContact: string;
+  notes: string;
+};
+
 export type DashboardSnapshot = {
   metrics: {
     activeMembers: number;
@@ -102,6 +140,9 @@ export type DashboardSnapshot = {
   classes: ClassSlot[];
   leads: Lead[];
   plans: PlanAssignment[];
+  measurements: BodyMeasurement[];
+  parqForms: ParqForm[];
+  medicalHistoryForms: MedicalHistoryForm[];
   ptPackages: Array<{
     id: string;
     member: string;
@@ -347,6 +388,110 @@ const dashboardSeed: DashboardSnapshot = {
   plans: [
     { id: "PLN-91", member: "Aarav Sharma", calories: 2400, protein: 155, workoutSplit: "Push Pull Legs", adherence: 88 },
     { id: "PLN-88", member: "Meera Iyer", calories: 1850, protein: 118, workoutSplit: "Strength + Yoga", adherence: 74 },
+  ],
+  measurements: [
+    {
+      id: "MSR-201",
+      member: "Aarav Sharma",
+      recordedOn: "01 Apr 2026",
+      heightCm: 178,
+      weightKg: 83.4,
+      age: 31,
+      sex: "male",
+      chestCm: 104,
+      waistCm: 91,
+      hipCm: 99,
+      bodyFatPercent: 22,
+      bmi: 26.3,
+      bmr: 1792,
+    },
+    {
+      id: "MSR-226",
+      member: "Aarav Sharma",
+      recordedOn: "15 May 2026",
+      heightCm: 178,
+      weightKg: 80.8,
+      age: 31,
+      sex: "male",
+      chestCm: 103,
+      waistCm: 87,
+      hipCm: 98,
+      bodyFatPercent: 19,
+      bmi: 25.5,
+      bmr: 1766,
+    },
+    {
+      id: "MSR-203",
+      member: "Meera Iyer",
+      recordedOn: "10 Apr 2026",
+      heightCm: 164,
+      weightKg: 67.2,
+      age: 28,
+      sex: "female",
+      chestCm: 91,
+      waistCm: 78,
+      hipCm: 99,
+      bodyFatPercent: 27,
+      bmi: 25,
+      bmr: 1379,
+    },
+    {
+      id: "MSR-229",
+      member: "Meera Iyer",
+      recordedOn: "20 May 2026",
+      heightCm: 164,
+      weightKg: 65.9,
+      age: 28,
+      sex: "female",
+      chestCm: 90,
+      waistCm: 75,
+      hipCm: 97,
+      bodyFatPercent: 25,
+      bmi: 24.5,
+      bmr: 1366,
+    },
+  ],
+  parqForms: [
+    {
+      id: "PARQ-118",
+      member: "Aarav Sharma",
+      submittedOn: "15 May 2026",
+      status: "clear",
+      yesAnswers: [],
+      notes: "No restrictions reported.",
+    },
+    {
+      id: "PARQ-121",
+      member: "Meera Iyer",
+      submittedOn: "20 May 2026",
+      status: "review",
+      yesAnswers: ["Bone or joint problem"],
+      notes: "Occasional knee pain during lunges.",
+    },
+  ],
+  medicalHistoryForms: [
+    {
+      id: "MED-109",
+      member: "Aarav Sharma",
+      submittedOn: "15 May 2026",
+      status: "clear",
+      conditions: ["None"],
+      allergies: "None",
+      medications: "None",
+      emergencyContact: "Neha Sharma, +91 98765 40001",
+      notes: "Cleared for regular training.",
+    },
+    {
+      id: "MED-114",
+      member: "Meera Iyer",
+      submittedOn: "20 May 2026",
+      status: "review",
+      conditions: ["Knee pain"],
+      allergies: "None",
+      medications: "Vitamin D",
+      emergencyContact: "Rohan Iyer, +91 98765 40002",
+      notes: "Coach to avoid high-impact jumps until assessed.",
+    },
   ],
   ptPackages: [
     { id: "PT-TRY-01", member: "Walk-in Trial", trainer: "Available coach", sessionsLeft: 1, progress: 0 },
