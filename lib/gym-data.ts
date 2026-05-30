@@ -122,6 +122,20 @@ export type MedicalHistoryForm = {
   notes: string;
 };
 
+export type MemberCredential = {
+  memberId: string;
+  pin: string;
+};
+
+export type AttendanceLog = {
+  id: string;
+  memberId: string;
+  memberName: string;
+  branch: string;
+  checkedInAt: string;
+  source: "member-qr";
+};
+
 export type DashboardSnapshot = {
   metrics: {
     activeMembers: number;
@@ -143,6 +157,8 @@ export type DashboardSnapshot = {
   measurements: BodyMeasurement[];
   parqForms: ParqForm[];
   medicalHistoryForms: MedicalHistoryForm[];
+  memberCredentials: MemberCredential[];
+  attendanceLogs: AttendanceLog[];
   ptPackages: Array<{
     id: string;
     member: string;
@@ -491,6 +507,30 @@ const dashboardSeed: DashboardSnapshot = {
       medications: "Vitamin D",
       emergencyContact: "Rohan Iyer, +91 98765 40002",
       notes: "Coach to avoid high-impact jumps until assessed.",
+    },
+  ],
+  memberCredentials: [
+    { memberId: "MBR-86108", pin: "1234" },
+    { memberId: "MBR-1048", pin: "1234" },
+    { memberId: "MBR-1037", pin: "1234" },
+    { memberId: "MBR-1019", pin: "1234" },
+  ],
+  attendanceLogs: [
+    {
+      id: "ATT-2401",
+      memberId: "MBR-1048",
+      memberName: "Aarav Sharma",
+      branch: "Delhi Branch",
+      checkedInAt: "2026-05-30T07:18:00.000+05:30",
+      source: "member-qr",
+    },
+    {
+      id: "ATT-2402",
+      memberId: "MBR-1037",
+      memberName: "Meera Iyer",
+      branch: "Delhi Branch",
+      checkedInAt: "2026-05-29T18:44:00.000+05:30",
+      source: "member-qr",
     },
   ],
   ptPackages: [

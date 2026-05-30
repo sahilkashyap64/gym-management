@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import QRCode from "qrcode";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   BodyMeasurement,
@@ -18,6 +19,12 @@ import type {
   StaffMember,
   Weekday,
 } from "@/lib/gym-data";
+import {
+  DASHBOARD_STORAGE_KEY,
+  createAttendancePayload,
+  ensureDemoSnapshot,
+  getTodayKey,
+} from "@/lib/demo-storage";
 
 export type AdminModule =
   | "overview"
@@ -61,7 +68,6 @@ type ConfirmDialog = {
   onConfirm: () => void;
 };
 
-const storageKey = "crosstrain-admin-snapshot-v9";
 const moduleAccess = ["Members", "Health", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
 const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -118,6 +124,15 @@ function createId(prefix: string, count: number) {
 
 function formatToday() {
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date());
+}
+
+function formatAttendanceDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function membershipPlanLabel(plan: MembershipPlan) {
@@ -276,6 +291,10 @@ function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSna
   const medicalHistoryForms = Array.isArray(saved.medicalHistoryForms)
     ? saved.medicalHistoryForms
     : initialSnapshot.medicalHistoryForms;
+  const memberCredentials = Array.isArray(saved.memberCredentials)
+    ? saved.memberCredentials
+    : initialSnapshot.memberCredentials;
+  const attendanceLogs = Array.isArray(saved.attendanceLogs) ? saved.attendanceLogs : initialSnapshot.attendanceLogs;
   const ptPackages = Array.isArray(saved.ptPackages) ? saved.ptPackages : initialSnapshot.ptPackages;
 
   return {
@@ -291,6 +310,8 @@ function restoreSnapshot(saved: DashboardSnapshot, initialSnapshot: DashboardSna
     measurements,
     parqForms,
     medicalHistoryForms,
+    memberCredentials,
+    attendanceLogs,
     ptPackages,
     staff: staff.map((staff) => ({
       ...staff,
@@ -399,13 +420,16 @@ export default function AdminPanel({
     emergencyContact: "",
     notes: "",
   });
+  const [selectedQrBranch, setSelectedQrBranch] = useState(initialSnapshot.branches[0]?.name ?? "Delhi Branch");
+  const [attendanceQrDataUrl, setAttendanceQrDataUrl] = useState("");
+  const [attendanceQrError, setAttendanceQrError] = useState("");
 
   useEffect(() => {
     let mounted = true;
-    const saved = window.localStorage.getItem(storageKey);
+    const saved = window.localStorage.getItem(DASHBOARD_STORAGE_KEY);
     if (saved) {
       window.setTimeout(() => {
-        if (mounted) setSnapshot(restoreSnapshot(JSON.parse(saved) as DashboardSnapshot, initialSnapshot));
+        if (mounted) setSnapshot(restoreSnapshot(ensureDemoSnapshot(JSON.parse(saved) as DashboardSnapshot, initialSnapshot), initialSnapshot));
       }, 0);
     }
     return () => {
@@ -414,8 +438,27 @@ export default function AdminPanel({
   }, [initialSnapshot]);
 
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
+    window.localStorage.setItem(DASHBOARD_STORAGE_KEY, JSON.stringify(snapshot));
   }, [snapshot]);
+
+  useEffect(() => {
+    function syncSavedSnapshot() {
+      const saved = window.localStorage.getItem(DASHBOARD_STORAGE_KEY);
+      if (!saved) return;
+      try {
+        setSnapshot(restoreSnapshot(ensureDemoSnapshot(JSON.parse(saved) as DashboardSnapshot, initialSnapshot), initialSnapshot));
+      } catch {
+        // Ignore malformed demo data so the admin panel remains usable.
+      }
+    }
+
+    window.addEventListener("focus", syncSavedSnapshot);
+    window.addEventListener("storage", syncSavedSnapshot);
+    return () => {
+      window.removeEventListener("focus", syncSavedSnapshot);
+      window.removeEventListener("storage", syncSavedSnapshot);
+    };
+  }, [initialSnapshot]);
 
   const metrics = useMemo(() => {
     const activeMembers = snapshot.members.filter((member) => member.status === "active").length;
@@ -444,6 +487,47 @@ export default function AdminPanel({
   const selectedPreviousMeasurement = selectedMemberProfile ? getPreviousMeasurement(snapshot, selectedMemberProfile.name) : undefined;
   const selectedLatestParq = selectedMemberProfile ? getLatestParq(snapshot, selectedMemberProfile.name) : undefined;
   const selectedLatestMedical = selectedMemberProfile ? getLatestMedicalHistory(snapshot, selectedMemberProfile.name) : undefined;
+  const attendanceQrPayload = useMemo(
+    () => JSON.stringify(createAttendancePayload(selectedQrBranch)),
+    [selectedQrBranch],
+  );
+  const todaysAttendanceLogs = useMemo(
+    () =>
+      snapshot.attendanceLogs
+        .filter((log) => getTodayKey(new Date(log.checkedInAt)) === getTodayKey())
+        .sort((first, second) => Date.parse(second.checkedInAt) - Date.parse(first.checkedInAt)),
+    [snapshot.attendanceLogs],
+  );
+  const latestAttendanceLogs = useMemo(
+    () => [...snapshot.attendanceLogs].sort((first, second) => Date.parse(second.checkedInAt) - Date.parse(first.checkedInAt)).slice(0, 8),
+    [snapshot.attendanceLogs],
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    QRCode.toDataURL(attendanceQrPayload, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 280,
+      color: {
+        dark: "#020617",
+        light: "#ffffff",
+      },
+    })
+      .then((dataUrl) => {
+        if (mounted) {
+          setAttendanceQrDataUrl(dataUrl);
+          setAttendanceQrError("");
+        }
+      })
+      .catch(() => {
+        if (mounted) setAttendanceQrError("Unable to generate attendance QR");
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [attendanceQrPayload]);
 
   function flash(message: string) {
     toastId.current += 1;
@@ -456,7 +540,7 @@ export default function AdminPanel({
   }
 
   function resetDemoData() {
-    window.localStorage.removeItem(storageKey);
+    window.localStorage.removeItem(DASHBOARD_STORAGE_KEY);
     setSnapshot(initialSnapshot);
     flash("Demo data reset");
   }
@@ -1747,30 +1831,93 @@ export default function AdminPanel({
   );
 
   const qrModule = (
-    <ModuleCard>
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">QR Attendance</p>
-      <h2 className="mt-2 text-xl font-black">Display-only scanner placeholder</h2>
-      <div className="mt-5 grid gap-6 lg:grid-cols-[280px_1fr]">
-        <div className="grid grid-cols-4 gap-1 rounded-md bg-white p-4 shadow-sm ring-1 ring-slate-200">
-          {Array.from({ length: 32 }).map((_, index) => (
-            <span
-              className={`aspect-square rounded-[2px] ${
-                [0, 1, 2, 4, 5, 8, 10, 13, 14, 17, 19, 20, 23, 25, 26, 28, 30, 31].includes(index)
-                  ? "bg-slate-950"
-                  : "bg-slate-200"
-              }`}
-              key={index}
-            />
-          ))}
+    <div className="grid gap-6">
+      <ModuleCard>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">QR Attendance</p>
+            <h2 className="mt-2 text-2xl font-black text-slate-950">Member scan check-in</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              Display this branch QR at the front desk. Members log in from the member portal and scan it to record attendance.
+            </p>
+          </div>
+          <Link className="rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white" href="/member-login">
+            Open member login
+          </Link>
         </div>
-        <div>
-          <p className="text-3xl font-black">{metrics.attendanceToday} check-ins today</p>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            QR attendance has its own route, but scanning/check-in mutation is intentionally disabled for now. The page is ready for a scanner integration later.
-          </p>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[340px_1fr]">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <Field label="Branch QR">
+              <select className={inputClass} onChange={(event) => setSelectedQrBranch(event.target.value)} value={selectedQrBranch}>
+                {branchOptions.map((branch) => (
+                  <option key={branch} value={branch}>{branch}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="mt-4 grid place-items-center rounded-lg bg-white p-5 shadow-sm ring-1 ring-slate-200">
+              {attendanceQrDataUrl ? (
+                <img alt={`${selectedQrBranch} attendance QR`} className="size-64" src={attendanceQrDataUrl} />
+              ) : (
+                <div className="grid size-64 place-items-center rounded-md bg-slate-100 text-sm font-bold text-slate-500">
+                  {attendanceQrError || "Generating QR"}
+                </div>
+              )}
+            </div>
+            <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">
+              Payload date: {getTodayKey()} · QR refreshes when branch changes.
+            </p>
+          </div>
+
+          <div className="grid gap-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Admin count</p>
+                <p className="mt-3 text-3xl font-black">{Math.max(metrics.attendanceToday, todaysAttendanceLogs.length)}</p>
+                <p className="mt-1 text-sm text-slate-500">Check-ins today</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">QR branch</p>
+                <p className="mt-3 text-xl font-black">{selectedQrBranch}</p>
+                <p className="mt-1 text-sm text-slate-500">Active display code</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Demo PIN</p>
+                <p className="mt-3 text-xl font-black">1234</p>
+                <p className="mt-1 text-sm text-slate-500">Seeded member login</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
+                <div>
+                  <p className="font-black">Latest Attendance Logs</p>
+                  <p className="mt-1 text-sm text-slate-500">Member QR scans recorded in demo storage.</p>
+                </div>
+                <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">
+                  {todaysAttendanceLogs.length} today
+                </span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {latestAttendanceLogs.length ? (
+                  latestAttendanceLogs.map((log) => (
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm" key={log.id}>
+                      <div>
+                        <p className="font-bold text-slate-950">{log.memberName}</p>
+                        <p className="mt-1 text-xs text-slate-500">{log.branch} · {log.id}</p>
+                      </div>
+                      <p className="text-xs font-bold text-slate-600">{formatAttendanceDateTime(log.checkedInAt)}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-sm font-semibold text-slate-500">No QR attendance logs yet.</div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </ModuleCard>
+      </ModuleCard>
+    </div>
   );
 
   const overviewModule = (
