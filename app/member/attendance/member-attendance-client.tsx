@@ -61,7 +61,7 @@ export default function MemberAttendanceClient({ initialSnapshot }: { initialSna
     let mounted = true;
     window.setTimeout(() => {
       if (!mounted) return;
-      setSnapshot(loadDemoSnapshot(initialSnapshot));
+      setSnapshot(initialSnapshot.dbStatus?.connected ? initialSnapshot : loadDemoSnapshot(initialSnapshot));
       setSession(loadMemberSession());
     }, 0);
 

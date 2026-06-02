@@ -139,6 +139,10 @@ export type AttendanceLog = {
 };
 
 export type DashboardSnapshot = {
+  dbStatus?: {
+    connected: boolean;
+    message: string;
+  };
   metrics: {
     activeMembers: number;
     monthlyRevenue: number;
@@ -172,6 +176,90 @@ export type DashboardSnapshot = {
 
 export interface GymDataStore {
   getDashboardSnapshot(): Promise<DashboardSnapshot>;
+}
+
+const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function formatDate(value: Date) {
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(value);
+}
+
+function formatDateTime(value: Date) {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(value);
+}
+
+function formatLastCheckIn(value?: Date) {
+  if (!value) return "Not checked in yet";
+  const today = new Date();
+  const sameDay =
+    value.getFullYear() === today.getFullYear() &&
+    value.getMonth() === today.getMonth() &&
+    value.getDate() === today.getDate();
+  const time = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit" }).format(value);
+  return sameDay ? `Today, ${time}` : formatDateTime(value);
+}
+
+function uiMemberStatus(status: string): MemberStatus {
+  if (status === "DUE") return "due";
+  if (status === "PAUSED") return "paused";
+  if (status === "LEAD") return "lead";
+  return "active";
+}
+
+function uiPlanCategory(category: string): MembershipPlan["category"] {
+  if (category === "THREE_DAYS_A_WEEK") return "3 Days a Week";
+  if (category === "TWO_DAYS_A_WEEK") return "2 Days a Week";
+  return "Regular";
+}
+
+function uiPlanStatus(status: string): MembershipPlan["status"] {
+  return status === "ARCHIVED" ? "archived" : "active";
+}
+
+function uiInvoiceStatus(status: string): Invoice["status"] {
+  if (status === "PAID") return "paid";
+  if (status === "DUE") return "due";
+  return "draft";
+}
+
+function uiPaymentMode(mode: string): Invoice["paymentMode"] {
+  if (mode === "GOOGLE_PAY_SCREENSHOT") return "Google Pay Screenshot";
+  if (mode === "RAZORPAY") return "Razorpay";
+  return "Cash";
+}
+
+function uiStaffRole(role: string): StaffRole {
+  if (role === "OWNER") return "Owner";
+  if (role === "MANAGER") return "Manager";
+  if (role === "TRAINER") return "Trainer";
+  return "Front Desk";
+}
+
+function uiLeadStage(stage: string): Lead["stage"] {
+  if (stage === "FOLLOW_UP") return "Follow-up";
+  if (stage === "TRIAL_BOOKED") return "Trial booked";
+  if (stage === "WON") return "Won";
+  return "New";
+}
+
+function uiSex(sex: string): BodyMeasurement["sex"] {
+  return sex === "FEMALE" ? "female" : "male";
+}
+
+function uiReviewStatus(status: string): FormReviewStatus {
+  return status === "REVIEW" ? "review" : "clear";
+}
+
+function durationLabel(days: number) {
+  if (days >= 365) return "12 Month";
+  if (days >= 180) return "6 Month";
+  if (days >= 90) return "3 Month";
+  return "1 Month";
 }
 
 const dashboardSeed: DashboardSnapshot = {
@@ -563,10 +651,245 @@ const dashboardSeed: DashboardSnapshot = {
 
 class SeededServerlessStore implements GymDataStore {
   async getDashboardSnapshot() {
-    return dashboardSeed;
+    return {
+      ...dashboardSeed,
+      dbStatus: {
+        connected: false,
+        message: "Database is not connected. Showing seed/demo data only.",
+      },
+    };
+  }
+}
+
+class PrismaGymDataStore implements GymDataStore {
+  async getDashboardSnapshot(): Promise<DashboardSnapshot> {
+    try {
+      const { prisma } = await import("@/lib/prisma");
+      const [
+        branches,
+        members,
+        membershipPlans,
+        invoices,
+        staff,
+        classes,
+        leads,
+        dietPlans,
+        ptPackages,
+        measurements,
+        parqForms,
+        medicalHistoryForms,
+        attendances,
+      ] = await Promise.all([
+        prisma.branch.findMany({ orderBy: { createdAt: "asc" } }),
+        prisma.member.findMany({
+          include: {
+            branch: true,
+            trainer: true,
+            memberships: {
+              where: { isActive: true },
+              include: { plan: true },
+              orderBy: { expiresAt: "desc" },
+              take: 1,
+            },
+            attendances: { orderBy: { checkedInAt: "desc" }, take: 1 },
+            invoices: { where: { status: "DUE" } },
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.membershipPlan.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.invoice.findMany({ include: { member: true, payments: { orderBy: { paidAt: "desc" }, take: 1 } }, orderBy: { issuedOn: "desc" } }),
+        prisma.staff.findMany({ include: { branch: true }, orderBy: { createdAt: "desc" } }),
+        prisma.classSlot.findMany({ include: { coach: true }, orderBy: [{ dayOfWeek: "asc" }, { createdAt: "desc" }] }),
+        prisma.lead.findMany({ orderBy: { createdAt: "desc" } }),
+        prisma.dietPlan.findMany({ include: { member: true }, orderBy: { createdAt: "desc" } }),
+        prisma.ptPackage.findMany({ include: { member: true, trainer: true }, orderBy: { createdAt: "desc" } }),
+        prisma.bodyMeasurement.findMany({ include: { member: true }, orderBy: { recordedOn: "desc" } }),
+        prisma.parqForm.findMany({ include: { member: true }, orderBy: { submittedOn: "desc" } }),
+        prisma.medicalHistoryForm.findMany({ include: { member: true }, orderBy: { submittedOn: "desc" } }),
+        prisma.attendance.findMany({ include: { member: true, branch: true }, orderBy: { checkedInAt: "desc" }, take: 100 }),
+      ]);
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const attendanceToday = await prisma.attendance.count({ where: { checkedInAt: { gte: todayStart } } });
+      const paidRevenue = invoices.filter((invoice) => invoice.status === "PAID").reduce((sum, invoice) => sum + invoice.amountInr + invoice.gstInr, 0);
+      const dues = invoices.filter((invoice) => invoice.status === "DUE").reduce((sum, invoice) => sum + invoice.amountInr + invoice.gstInr, 0);
+      const activeMembers = members.filter((member) => member.status === "ACTIVE").length;
+      const activeLeads = leads.filter((lead) => lead.stage !== "WON").length;
+
+      const attendanceChart = weekdays.map((label, index) => {
+        const visits = attendances.filter((attendance) => {
+          const jsDay = attendance.checkedInAt.getDay();
+          const mondayIndex = jsDay === 0 ? 6 : jsDay - 1;
+          return mondayIndex === index;
+        }).length;
+        return { label: label.slice(0, 3), visits, trend: "steady" as AttendanceTrend };
+      });
+
+      const snapshot: DashboardSnapshot = {
+        dbStatus: {
+          connected: true,
+          message: "Database connected. Changes are saved to PostgreSQL.",
+        },
+        metrics: {
+          activeMembers,
+          monthlyRevenue: paidRevenue,
+          dues,
+          attendanceToday,
+          retention: members.length ? Math.round((activeMembers / members.length) * 100) : 0,
+          leads: activeLeads,
+        },
+        attendance: attendanceChart,
+        branches: branches.map((branch) => ({
+          id: branch.code,
+          name: branch.name,
+          area: branch.area,
+          city: branch.city,
+          address: branch.address,
+          phone: branch.phone,
+          email: branch.email,
+          status: branch.status === "LAUNCHING" ? "launching" : "active",
+        })),
+        members: members.map((member) => {
+          const activeMembership = member.memberships[0];
+          const plan = activeMembership?.plan
+            ? `${uiPlanCategory(activeMembership.plan.category)} ${durationLabel(activeMembership.plan.durationDays)}`
+            : "No active plan";
+          return {
+            id: member.memberCode,
+            name: member.name,
+            phone: member.phone,
+            email: member.email ?? undefined,
+            branch: member.branch.name,
+            plan,
+            status: uiMemberStatus(member.status),
+            expiry: activeMembership ? formatDate(activeMembership.expiresAt) : "No expiry",
+            dues: member.invoices.reduce((sum, invoice) => sum + invoice.amountInr + invoice.gstInr, 0),
+            lastCheckIn: formatLastCheckIn(member.attendances[0]?.checkedInAt),
+            trainer: member.trainer?.name ?? "Unassigned",
+          };
+        }),
+        invoices: invoices.map((invoice) => ({
+          id: invoice.invoiceCode,
+          member: invoice.member.name,
+          amount: invoice.amountInr,
+          gst: invoice.gstInr,
+          status: uiInvoiceStatus(invoice.status),
+          issuedOn: formatDate(invoice.issuedOn),
+          paymentMode: uiPaymentMode(invoice.payments?.[0]?.mode ?? "CASH"),
+        })),
+        membershipPlans: membershipPlans.map((plan) => ({
+          id: plan.code,
+          category: uiPlanCategory(plan.category),
+          duration: durationLabel(plan.durationDays),
+          price: plan.priceInr,
+          status: uiPlanStatus(plan.status),
+        })),
+        staff: staff.map((staffMember) => ({
+          id: staffMember.staffCode,
+          name: staffMember.name,
+          role: uiStaffRole(staffMember.role),
+          branch: staffMember.branch.name,
+          disciplines: staffMember.disciplines,
+          access: staffMember.access,
+          attendance: staffMember.attendance,
+          performance: staffMember.performance ?? "Team member",
+          bio: staffMember.bio ?? staffMember.performance ?? "Team member profile",
+        })),
+        classes: classes.map((slot) => ({
+          id: slot.code,
+          day: weekdays[Math.max(0, Math.min(6, slot.dayOfWeek))],
+          name: slot.name,
+          coach: slot.coach?.name ?? "Unassigned",
+          time: slot.timeLabel,
+          booked: slot.booked,
+          capacity: slot.capacity,
+        })),
+        leads: leads.map((lead) => ({
+          id: lead.leadCode,
+          name: lead.name,
+          source: lead.source,
+          stage: uiLeadStage(lead.stage),
+          nextFollowUp: lead.nextFollowUp ? formatDate(lead.nextFollowUp) : "Not set",
+        })),
+        plans: dietPlans.map((plan) => ({
+          id: plan.id,
+          member: plan.member.name,
+          calories: plan.calories,
+          protein: plan.proteinGrams,
+          workoutSplit: plan.workoutSplit,
+          adherence: plan.adherence,
+        })),
+        measurements: measurements.map((measurement) => ({
+          id: measurement.measurementCode,
+          member: measurement.member.name,
+          recordedOn: formatDate(measurement.recordedOn),
+          heightCm: measurement.heightCm,
+          weightKg: measurement.weightKg,
+          age: measurement.age,
+          sex: uiSex(measurement.sex),
+          chestCm: measurement.chestCm,
+          waistCm: measurement.waistCm,
+          hipCm: measurement.hipCm,
+          bodyFatPercent: measurement.bodyFatPercent,
+          bmi: measurement.bmi,
+          bmr: measurement.bmr,
+        })),
+        parqForms: parqForms.map((form) => ({
+          id: form.formCode,
+          member: form.member.name,
+          submittedOn: formatDate(form.submittedOn),
+          status: uiReviewStatus(form.status),
+          yesAnswers: form.yesAnswers,
+          notes: form.notes ?? "",
+        })),
+        medicalHistoryForms: medicalHistoryForms.map((form) => ({
+          id: form.formCode,
+          member: form.member.name,
+          submittedOn: formatDate(form.submittedOn),
+          status: uiReviewStatus(form.status),
+          conditions: form.conditions,
+          allergies: form.allergies,
+          medications: form.medications,
+          emergencyContact: form.emergencyContact,
+          notes: form.notes ?? "",
+        })),
+        memberCredentials: members
+          .filter((member) => member.email)
+          .map((member) => ({
+            memberId: member.memberCode,
+            email: member.email!,
+            password: "password",
+          })),
+        attendanceLogs: attendances.map((attendance) => ({
+          id: attendance.id,
+          memberId: attendance.member.memberCode,
+          memberName: attendance.member.name,
+          branch: attendance.branch.name,
+          checkedInAt: attendance.checkedInAt.toISOString(),
+          source: "member-qr",
+        })),
+        ptPackages: ptPackages.map((pack) => ({
+          id: pack.packageCode,
+          member: pack.member.name,
+          trainer: pack.trainer.name,
+          sessionsLeft: pack.sessionsLeft,
+          progress: pack.progress,
+        })),
+      };
+      return snapshot;
+    } catch {
+      return {
+        ...dashboardSeed,
+        dbStatus: {
+          connected: false,
+          message: "Database connection failed. Showing seed/demo data only; changes will not be saved.",
+        },
+      };
+    }
   }
 }
 
 export function getGymDataStore(): GymDataStore {
-  return new SeededServerlessStore();
+  return process.env.DATABASE_URL ? new PrismaGymDataStore() : new SeededServerlessStore();
 }

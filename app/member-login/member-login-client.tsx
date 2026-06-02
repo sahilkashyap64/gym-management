@@ -24,6 +24,7 @@ export default function MemberLoginClient({ initialSnapshot }: { initialSnapshot
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (initialSnapshot.dbStatus?.connected) return;
     let mounted = true;
     window.setTimeout(() => {
       if (!mounted) return;

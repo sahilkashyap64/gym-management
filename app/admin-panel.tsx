@@ -6,11 +6,9 @@ import QRCode from "qrcode";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
   BodyMeasurement,
-  ClassSlot,
   DashboardSnapshot,
   FormReviewStatus,
   Invoice,
-  Lead,
   MedicalHistoryForm,
   MembershipPlan,
   Member,
@@ -47,7 +45,6 @@ export type AdminModule =
   | "whatsapp-reminders";
 
 type PtPackage = DashboardSnapshot["ptPackages"][number];
-type LeadStage = Lead["stage"];
 type InvoiceStatus = Invoice["status"];
 type Toast = { id: number; message: string };
 type ReminderResult = {
@@ -92,7 +89,6 @@ type ConfirmDialog = {
 };
 
 const moduleAccess = ["Members", "Health", "Membership", "Billing", "Payments", "QR", "PT", "Staff", "Classes", "Leads", "Plans", "Reports"];
-const leadStages: LeadStage[] = ["New", "Follow-up", "Trial booked", "Won"];
 const weekdays: Weekday[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const membershipCategories: MembershipPlan["category"][] = ["Regular", "3 Days a Week", "2 Days a Week"];
 const parqQuestions = [
@@ -479,6 +475,7 @@ export default function AdminPanel({
   }, [router]);
 
   useEffect(() => {
+    if (initialSnapshot.dbStatus?.connected) return;
     let mounted = true;
     const saved = window.localStorage.getItem(DASHBOARD_STORAGE_KEY);
     if (saved) {
@@ -492,6 +489,7 @@ export default function AdminPanel({
   }, [initialSnapshot]);
 
   useEffect(() => {
+    if (snapshot.dbStatus?.connected) return;
     window.localStorage.setItem(DASHBOARD_STORAGE_KEY, JSON.stringify(snapshot));
   }, [snapshot]);
 
@@ -614,9 +612,28 @@ export default function AdminPanel({
     setToast({ id: toastId.current, message });
   }
 
-  function updateSnapshot(updater: (current: DashboardSnapshot) => DashboardSnapshot, message: string) {
-    setSnapshot((current) => updater(current));
-    flash(message);
+  async function commitAdminAction(action: string, payload: Record<string, unknown>, message: string) {
+    if (!snapshot.dbStatus?.connected) {
+      flash("Database is not connected. This action was not saved.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, payload }),
+      });
+      const result = (await response.json()) as { snapshot?: DashboardSnapshot; error?: string };
+      if (!response.ok || !result.snapshot) {
+        flash(result.error ?? "Database action failed");
+        return;
+      }
+      setSnapshot(result.snapshot);
+      flash(message);
+    } catch {
+      flash("Database request failed. Check the connection and try again.");
+    }
   }
 
   function toggleReminderSelection(memberId: string) {
@@ -835,54 +852,33 @@ export default function AdminPanel({
   function addMember(formData: FormData) {
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return;
-    const member: Member = {
-      id: createId("MBR", snapshot.members.length + 1100),
+    void commitAdminAction(
+      "addMember",
+      {
       name,
       phone: String(formData.get("phone") ?? ""),
+        email: String(formData.get("email") ?? ""),
       branch: String(formData.get("branch") ?? "Delhi Branch"),
       plan: String(formData.get("plan") ?? "Regular 1 Month"),
       status: String(formData.get("status") ?? "active") as MemberStatus,
       expiry: String(formData.get("expiry") ?? "30 Jun 2026"),
-      dues: 0,
-      lastCheckIn: "Not checked in yet",
       trainer: String(formData.get("trainer") ?? "Unassigned"),
-    };
-    updateSnapshot((current) => ({ ...current, members: [member, ...current.members] }), "Member added");
+      },
+      "Member added",
+    );
     setMemberForm({ ...memberForm, name: "", phone: "", trainer: "Unassigned" });
   }
 
   function updateMemberStatus(id: string, status: MemberStatus) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        members: current.members.map((member) =>
-          member.id === id
-            ? { ...member, status, dues: status === "due" ? Math.max(member.dues, 2500) : member.dues }
-            : member,
-        ),
-      }),
-      "Member status updated",
-    );
+    void commitAdminAction("updateMemberStatus", { id, status }, "Member status updated");
   }
 
   function updateMemberBranch(id: string, branch: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        members: current.members.map((member) => (member.id === id ? { ...member, branch } : member)),
-      }),
-      "Member branch updated",
-    );
+    void commitAdminAction("updateMemberBranch", { id, branch }, "Member branch updated");
   }
 
   function updateMemberTrainer(id: string, trainer: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        members: current.members.map((member) => (member.id === id ? { ...member, trainer } : member)),
-      }),
-      "Member trainer updated",
-    );
+    void commitAdminAction("updateMemberTrainer", { id, trainer }, "Member trainer updated");
   }
 
   function addMeasurement(formData: FormData) {
@@ -907,7 +903,7 @@ export default function AdminPanel({
       bmi: calculateBmi(heightCm, weightKg),
       bmr: calculateBmr(heightCm, weightKg, age, sex),
     };
-    updateSnapshot((current) => ({ ...current, measurements: [...current.measurements, measurement] }), "Measurement added from member app");
+    void commitAdminAction("addMeasurement", measurement as unknown as Record<string, unknown>, "Measurement added from member app");
     setSelectedHealthMember(member);
   }
 
@@ -923,7 +919,7 @@ export default function AdminPanel({
       yesAnswers,
       notes: String(formData.get("notes") ?? "").trim() || (yesAnswers.length ? "Review before intense training." : "No restrictions reported."),
     };
-    updateSnapshot((current) => ({ ...current, parqForms: [...current.parqForms, form] }), "PAR-Q form submitted");
+    void commitAdminAction("addParqForm", form as unknown as Record<string, unknown>, "PAR-Q form submitted");
     setSelectedHealthMember(member);
   }
 
@@ -947,52 +943,27 @@ export default function AdminPanel({
       emergencyContact: String(formData.get("emergencyContact") ?? "").trim() || "Not provided",
       notes: String(formData.get("notes") ?? "").trim() || "Submitted from member app.",
     };
-    updateSnapshot((current) => ({ ...current, medicalHistoryForms: [...current.medicalHistoryForms, form] }), "Medical history submitted");
+    void commitAdminAction("addMedicalHistoryForm", form as unknown as Record<string, unknown>, "Medical history submitted");
     setSelectedHealthMember(member);
   }
 
   function addInvoice(formData: FormData) {
     const amount = Number(formData.get("amount") ?? 0);
     if (!amount) return;
-    const invoice: Invoice = {
-      id: createId("INV", snapshot.invoices.length + 2600),
+    void commitAdminAction(
+      "addInvoice",
+      {
       member: String(formData.get("member") ?? ""),
       amount,
-      gst: Math.round(amount * 0.18),
       status: String(formData.get("status") ?? "draft") as InvoiceStatus,
-      issuedOn: new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date()),
       paymentMode: String(formData.get("paymentMode") ?? "Cash") as Invoice["paymentMode"],
-    };
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        invoices: [invoice, ...current.invoices],
-        members: current.members.map((member) =>
-          member.name === invoice.member && invoice.status === "due"
-            ? { ...member, status: "due", dues: member.dues + invoice.amount + invoice.gst }
-            : member,
-        ),
-      }),
+      },
       "Invoice created",
     );
   }
 
   function markInvoicePaid(id: string, paymentMode?: Invoice["paymentMode"]) {
-    updateSnapshot(
-      (current) => {
-        const invoice = current.invoices.find((item) => item.id === id);
-        return {
-          ...current,
-          invoices: current.invoices.map((item) => (item.id === id ? { ...item, status: "paid", paymentMode: paymentMode ?? item.paymentMode } : item)),
-          members: current.members.map((member) =>
-            invoice && member.name === invoice.member
-              ? { ...member, status: "active", dues: Math.max(0, member.dues - invoice.amount - invoice.gst) }
-              : member,
-          ),
-        };
-      },
-      "Payment captured and receipt reconciled",
-    );
+    void commitAdminAction("markInvoicePaid", { id, paymentMode }, "Payment captured and receipt reconciled");
   }
 
   function addPtPackage(formData: FormData) {
@@ -1005,21 +976,11 @@ export default function AdminPanel({
       sessionsLeft: Number(formData.get("sessionsLeft") ?? 12),
       progress: 0,
     };
-    updateSnapshot((current) => ({ ...current, ptPackages: [pack, ...current.ptPackages] }), "PT package assigned");
+    void commitAdminAction("addPtPackage", pack as unknown as Record<string, unknown>, "PT package assigned");
   }
 
   function logPtSession(id: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        ptPackages: current.ptPackages.map((pack) =>
-          pack.id === id
-            ? { ...pack, sessionsLeft: Math.max(0, pack.sessionsLeft - 1), progress: Math.min(100, pack.progress + 8) }
-            : pack,
-        ),
-      }),
-      "PT session logged",
-    );
+    void commitAdminAction("logPtSession", { id }, "PT session logged");
   }
 
   function addStaff(formData: FormData) {
@@ -1036,18 +997,12 @@ export default function AdminPanel({
       performance: "New staff profile",
       bio: "New team member profile",
     };
-    updateSnapshot((current) => ({ ...current, staff: [staff, ...current.staff] }), "Staff account created");
+    void commitAdminAction("addStaff", staff as unknown as Record<string, unknown>, "Staff account created");
     setStaffForm({ ...staffForm, name: "" });
   }
 
   function updateStaffBranch(id: string, branch: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        staff: current.staff.map((staff) => (staff.id === id ? { ...staff, branch } : staff)),
-      }),
-      "Staff branch updated",
-    );
+    void commitAdminAction("updateStaffBranch", { id, branch }, "Staff branch updated");
   }
 
   function isMembershipPlanUsed(plan: MembershipPlan) {
@@ -1060,14 +1015,7 @@ export default function AdminPanel({
     const duration = String(formData.get("duration") ?? "").trim();
     const price = Number(formData.get("price") ?? 0);
     if (!duration || !price) return;
-    const membershipPlan: MembershipPlan = {
-      id: createId("MEM", snapshot.membershipPlans.length + 100),
-      category,
-      duration,
-      price,
-      status: "active",
-    };
-    updateSnapshot((current) => ({ ...current, membershipPlans: [membershipPlan, ...current.membershipPlans] }), "Membership plan added");
+    void commitAdminAction("addMembershipPlan", { category, duration, price }, "Membership plan added");
   }
 
   function updateMembershipPlan(id: string, formData: FormData) {
@@ -1075,35 +1023,15 @@ export default function AdminPanel({
     const duration = String(formData.get("duration") ?? "").trim();
     const price = Number(formData.get("price") ?? 0);
     if (!duration || !price) return;
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        membershipPlans: current.membershipPlans.map((plan) =>
-          plan.id === id ? { ...plan, category, duration, price } : plan,
-        ),
-      }),
-      "Membership plan updated",
-    );
+    void commitAdminAction("updateMembershipPlan", { id, category, duration, price }, "Membership plan updated");
   }
 
   function archiveMembershipPlan(id: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        membershipPlans: current.membershipPlans.map((plan) => (plan.id === id ? { ...plan, status: "archived" } : plan)),
-      }),
-      "Membership plan archived",
-    );
+    void commitAdminAction("setMembershipPlanStatus", { id, status: "archived" }, "Membership plan archived");
   }
 
   function restoreMembershipPlan(id: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        membershipPlans: current.membershipPlans.map((plan) => (plan.id === id ? { ...plan, status: "active" } : plan)),
-      }),
-      "Membership plan restored",
-    );
+    void commitAdminAction("setMembershipPlanStatus", { id, status: "active" }, "Membership plan restored");
   }
 
   function deleteMembershipPlan(id: string) {
@@ -1112,115 +1040,55 @@ export default function AdminPanel({
       archiveMembershipPlan(id);
       return;
     }
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        membershipPlans: current.membershipPlans.filter((plan) => plan.id !== id),
-      }),
-      "Membership plan deleted",
-    );
+    void commitAdminAction("deleteMembershipPlan", { id }, "Membership plan deleted");
   }
 
   function toggleStaffAccess(id: string, access: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        staff: current.staff.map((staff) =>
-          staff.id === id
-            ? {
-                ...staff,
-                access: staff.access.includes(access)
-                  ? staff.access.filter((item) => item !== access)
-                  : [...staff.access, access],
-              }
-            : staff,
-        ),
-      }),
-      "Staff permission updated",
-    );
+    void commitAdminAction("toggleStaffAccess", { id, access }, "Staff permission updated");
   }
 
   function addClass(formData: FormData) {
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return;
-    const slot: ClassSlot = {
-      id: createId("CLS", snapshot.classes.length + 20),
+    void commitAdminAction(
+      "addClass",
+      {
       day: String(formData.get("day") ?? "Monday") as Weekday,
       name,
       coach: String(formData.get("coach") ?? ""),
       time: String(formData.get("time") ?? "7:00 PM"),
-      booked: 0,
       capacity: Number(formData.get("capacity") ?? 20),
-    };
-    updateSnapshot((current) => ({ ...current, classes: [slot, ...current.classes] }), "Class scheduled");
+      },
+      "Class scheduled",
+    );
     setClassForm({ ...classForm, name: "", coach: "" });
   }
 
   function adjustClassBooking(id: string, delta: 1 | -1) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        classes: current.classes.map((slot) =>
-          slot.id === id ? { ...slot, booked: Math.max(0, Math.min(slot.capacity, slot.booked + delta)) } : slot,
-        ),
-      }),
-      delta > 0 ? "Class slot booked" : "Class booking cancelled",
-    );
+    void commitAdminAction("adjustClassBooking", { id, delta }, delta > 0 ? "Class slot booked" : "Class booking cancelled");
   }
 
   function addLead(formData: FormData) {
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return;
-    const lead: Lead = {
-      id: createId("LED", snapshot.leads.length + 500),
+    void commitAdminAction(
+      "addLead",
+      {
       name,
       source: String(formData.get("source") ?? "Walk-in"),
-      stage: "New",
       nextFollowUp: String(formData.get("nextFollowUp") ?? "Tomorrow"),
-    };
-    updateSnapshot((current) => ({ ...current, leads: [lead, ...current.leads] }), "Lead captured");
+      },
+      "Lead captured",
+    );
     setLeadForm({ ...leadForm, name: "" });
   }
 
   function advanceLead(id: string) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        leads: current.leads.map((lead) => {
-          if (lead.id !== id) return lead;
-          const nextIndex = Math.min(leadStages.indexOf(lead.stage) + 1, leadStages.length - 1);
-          return { ...lead, stage: leadStages[nextIndex] };
-        }),
-      }),
-      "Lead stage updated",
-    );
+    void commitAdminAction("advanceLead", { id }, "Lead stage updated");
   }
 
   function convertLead(id: string) {
-    updateSnapshot(
-      (current) => {
-        const lead = current.leads.find((item) => item.id === id);
-        if (!lead) return current;
-        const member: Member = {
-          id: createId("MBR", current.members.length + 1100),
-          name: lead.name,
-          phone: "Pending",
-          branch: "Delhi Branch",
-          plan: "Trial Converted",
-          status: "active",
-          expiry: "30 Jun 2026",
-          dues: 0,
-          lastCheckIn: "Not checked in yet",
-          trainer: "Unassigned",
-        };
-        return {
-          ...current,
-          leads: current.leads.map((item) => (item.id === id ? { ...item, stage: "Won" } : item)),
-          members: [member, ...current.members],
-        };
-      },
-      "Lead converted to member",
-    );
+    void commitAdminAction("convertLead", { id }, "Lead converted to member");
   }
 
   function addPlan(formData: FormData) {
@@ -1232,19 +1100,11 @@ export default function AdminPanel({
       workoutSplit: String(formData.get("workoutSplit") ?? ""),
       adherence: 0,
     };
-    updateSnapshot((current) => ({ ...current, plans: [plan, ...current.plans] }), "Plan assigned");
+    void commitAdminAction("addPlan", plan as unknown as Record<string, unknown>, "Plan assigned");
   }
 
   function adjustPlanAdherence(id: string, delta: 10 | -10) {
-    updateSnapshot(
-      (current) => ({
-        ...current,
-        plans: current.plans.map((plan) =>
-          plan.id === id ? { ...plan, adherence: Math.max(0, Math.min(100, plan.adherence + delta)) } : plan,
-        ),
-      }),
-      "Plan adherence updated",
-    );
+    void commitAdminAction("adjustPlanAdherence", { id, delta }, "Plan adherence updated");
   }
 
   const metricCards = (
@@ -2903,6 +2763,16 @@ export default function AdminPanel({
               </button>
             </div>
           </header>
+
+          <div
+            className={`mt-5 rounded-lg border px-4 py-3 text-sm font-bold ${
+              snapshot.dbStatus?.connected
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+            }`}
+          >
+            {snapshot.dbStatus?.message ?? "Database status unknown. Refresh the page to verify persistence."}
+          </div>
 
           <div className="mt-6 grid gap-6">
             {modules[module]}
