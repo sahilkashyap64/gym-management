@@ -8,6 +8,7 @@ export type Member = {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   branch: string;
   plan: string;
   status: MemberStatus;
@@ -124,7 +125,8 @@ export type MedicalHistoryForm = {
 
 export type MemberCredential = {
   memberId: string;
-  pin: string;
+  email: string;
+  password: string;
 };
 
 export type AttendanceLog = {
@@ -195,8 +197,9 @@ const dashboardSeed: DashboardSnapshot = {
       id: "MBR-86108",
       name: "Sahil Kashyap",
       phone: "+91 79822 19140",
+      email: "student1@example.com",
       branch: "Delhi Branch",
-      plan: "VIP 12 Months",
+      plan: "Regular 12 Month",
       status: "active",
       expiry: "06 Oct 2026",
       dues: 0,
@@ -207,8 +210,9 @@ const dashboardSeed: DashboardSnapshot = {
       id: "MBR-1048",
       name: "Aarav Sharma",
       phone: "+91 98765 41048",
+      email: "student2@example.com",
       branch: "Delhi Branch",
-      plan: "Annual Strength",
+      plan: "Regular 12 Month",
       status: "active",
       expiry: "18 Aug 2026",
       dues: 0,
@@ -219,8 +223,9 @@ const dashboardSeed: DashboardSnapshot = {
       id: "MBR-1037",
       name: "Meera Iyer",
       phone: "+91 98765 41037",
+      email: "student3@example.com",
       branch: "Delhi Branch",
-      plan: "Quarterly Plus",
+      plan: "Regular 3 Month",
       status: "due",
       expiry: "12 May 2026",
       dues: 12500,
@@ -231,13 +236,27 @@ const dashboardSeed: DashboardSnapshot = {
       id: "MBR-1019",
       name: "Kabir Sethi",
       phone: "+91 98765 41019",
+      email: "student4@example.com",
       branch: "Noida Sector 58 Branch",
-      plan: "Monthly Access",
+      plan: "Regular 1 Month",
       status: "paused",
       expiry: "26 Jun 2026",
       dues: 0,
       lastCheckIn: "03 May, 8:02 AM",
       trainer: "Unassigned",
+    },
+    {
+      id: "MBR-1026",
+      name: "Riya Menon",
+      phone: "+91 98765 41026",
+      email: "student5@example.com",
+      branch: "Faridabad Sector 28 Branch",
+      plan: "3 Days a Week 3 Month",
+      status: "active",
+      expiry: "07 Jun 2026",
+      dues: 0,
+      lastCheckIn: "19 May, 7:40 AM",
+      trainer: "Pawan Pratap",
     },
   ],
   invoices: [
@@ -510,10 +529,11 @@ const dashboardSeed: DashboardSnapshot = {
     },
   ],
   memberCredentials: [
-    { memberId: "MBR-86108", pin: "1234" },
-    { memberId: "MBR-1048", pin: "1234" },
-    { memberId: "MBR-1037", pin: "1234" },
-    { memberId: "MBR-1019", pin: "1234" },
+    { memberId: "MBR-86108", email: "student1@example.com", password: "password" },
+    { memberId: "MBR-1048", email: "student2@example.com", password: "password" },
+    { memberId: "MBR-1037", email: "student3@example.com", password: "password" },
+    { memberId: "MBR-1019", email: "student4@example.com", password: "password" },
+    { memberId: "MBR-1026", email: "student5@example.com", password: "password" },
   ],
   attendanceLogs: [
     {

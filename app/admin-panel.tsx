@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import type {
@@ -21,9 +22,11 @@ import type {
 } from "@/lib/gym-data";
 import {
   DASHBOARD_STORAGE_KEY,
+  clearAdminSession,
   createAttendancePayload,
   ensureDemoSnapshot,
   getTodayKey,
+  loadAdminSession,
 } from "@/lib/demo-storage";
 import { getMembershipReminders, type MembershipReminder } from "@/lib/whatsapp-reminders";
 
@@ -52,7 +55,18 @@ type ReminderResult = {
   memberName: string;
   phone: string;
   ok: boolean;
+  messageId?: string;
   error?: string;
+};
+type WhatsAppConfigStatus = {
+  configured: boolean;
+  hasToken: boolean;
+  hasPhoneNumberId: boolean;
+  hasBusinessAccountId: boolean;
+  apiVersion: string;
+  sendMode: "template" | "text";
+  templateName: string | null;
+  templateLanguage: string;
 };
 type ActiveModal =
   | "member"
@@ -343,7 +357,10 @@ export default function AdminPanel({
   initialSnapshot: DashboardSnapshot;
   module: AdminModule;
 }) {
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState(initialSnapshot);
+  const [adminChecked, setAdminChecked] = useState(false);
+  const [adminName, setAdminName] = useState("");
   const [toast, setToast] = useState<Toast | null>(null);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
@@ -438,6 +455,28 @@ export default function AdminPanel({
   const [reminderSending, setReminderSending] = useState(false);
   const [reminderResults, setReminderResults] = useState<ReminderResult[]>([]);
   const [reminderError, setReminderError] = useState("");
+  const [whatsAppConfigStatus, setWhatsAppConfigStatus] = useState<WhatsAppConfigStatus | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    window.setTimeout(() => {
+      if (!mounted) return;
+
+      const session = loadAdminSession();
+      if (!session) {
+        router.replace("/login");
+        setAdminChecked(true);
+        return;
+      }
+
+      setAdminName(session.name);
+      setAdminChecked(true);
+    }, 0);
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
   useEffect(() => {
     let mounted = true;
@@ -455,6 +494,24 @@ export default function AdminPanel({
   useEffect(() => {
     window.localStorage.setItem(DASHBOARD_STORAGE_KEY, JSON.stringify(snapshot));
   }, [snapshot]);
+
+  useEffect(() => {
+    if (module !== "whatsapp-reminders") return;
+
+    let mounted = true;
+    fetch("/api/whatsapp/membership-reminders")
+      .then((response) => response.json())
+      .then((data: WhatsAppConfigStatus) => {
+        if (mounted) setWhatsAppConfigStatus(data);
+      })
+      .catch(() => {
+        if (mounted) setWhatsAppConfigStatus(null);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [module]);
 
   useEffect(() => {
     function syncSavedSnapshot() {
@@ -587,13 +644,20 @@ export default function AdminPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reminders: selectedReminders }),
       });
-      const data = (await response.json()) as { error?: string; results?: ReminderResult[]; sent?: number; failed?: number };
+      const data = (await response.json()) as {
+        config?: WhatsAppConfigStatus;
+        error?: string;
+        results?: ReminderResult[];
+        sent?: number;
+        failed?: number;
+      };
+      if (data.config) setWhatsAppConfigStatus(data.config);
       if (!response.ok) {
         setReminderError(data.error ?? "Unable to send WhatsApp reminders");
         return;
       }
       setReminderResults(data.results ?? []);
-      flash(`${data.sent ?? 0} WhatsApp reminder${data.sent === 1 ? "" : "s"} sent`);
+      flash(`${data.sent ?? 0} WhatsApp reminder${data.sent === 1 ? "" : "s"} sent manually`);
     } catch {
       setReminderError("Unable to reach the WhatsApp reminder API route.");
     } finally {
@@ -605,6 +669,11 @@ export default function AdminPanel({
     window.localStorage.removeItem(DASHBOARD_STORAGE_KEY);
     setSnapshot(initialSnapshot);
     flash("Demo data reset");
+  }
+
+  function logoutAdmin() {
+    clearAdminSession();
+    router.push("/login");
   }
 
   function openConfirmDialog(dialog: ConfirmDialog) {
@@ -2017,8 +2086,31 @@ export default function AdminPanel({
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">API config</p>
-            <p className="mt-3 text-sm font-black">Server env required</p>
-            <p className="mt-1 text-sm text-slate-500">META_TOKEN + phone number ID</p>
+            <p className={`mt-3 text-sm font-black ${whatsAppConfigStatus?.configured ? "text-emerald-700" : "text-rose-700"}`}>
+              {whatsAppConfigStatus?.configured ? "Ready for manual send" : "Server env required"}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              {whatsAppConfigStatus
+                ? `${whatsAppConfigStatus.apiVersion} - ${whatsAppConfigStatus.sendMode === "template" ? "Template" : "Text"} mode`
+                : "Checking WhatsApp API route"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 sm:col-span-3">
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Manual trigger</p>
+            <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
+              <p>
+                <span className="font-bold text-slate-900">Phone number ID:</span>{" "}
+                {whatsAppConfigStatus?.hasPhoneNumberId ? "configured" : "missing"}
+              </p>
+              <p>
+                <span className="font-bold text-slate-900">Access token:</span>{" "}
+                {whatsAppConfigStatus?.hasToken ? "configured" : "missing"}
+              </p>
+              <p>
+                <span className="font-bold text-slate-900">Template:</span>{" "}
+                {whatsAppConfigStatus?.templateName ?? "not configured"}
+              </p>
+            </div>
           </div>
         </div>
       </ModuleCard>
@@ -2117,7 +2209,10 @@ export default function AdminPanel({
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-4 text-sm" key={`${result.memberId}-${result.phone}`}>
                 <div>
                   <p className="font-bold text-slate-950">{result.memberName}</p>
-                  <p className="mt-1 text-xs text-slate-500">+{result.phone}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    +{result.phone}
+                    {result.messageId ? ` - ${result.messageId}` : ""}
+                  </p>
                 </div>
                 <span className={`rounded-md px-2 py-1 text-xs font-bold ${result.ok ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
                   {result.ok ? "sent" : result.error ?? "failed"}
@@ -2186,6 +2281,32 @@ export default function AdminPanel({
     "qr-attendance": qrModule,
     "whatsapp-reminders": whatsappRemindersModule,
   };
+
+  if (!adminChecked) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f6f7f4] px-4 py-6 text-slate-950">
+        <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 text-center shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Crosstrain Admin</p>
+          <h1 className="mt-2 text-3xl font-black">Checking session</h1>
+        </section>
+      </main>
+    );
+  }
+
+  if (!adminName) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f6f7f4] px-4 py-6 text-slate-950">
+        <section className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-5 text-center shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Crosstrain Admin</p>
+          <h1 className="mt-2 text-3xl font-black">Login Required</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Log in as an admin before opening the dashboard.</p>
+          <Link className="mt-5 inline-flex rounded-md bg-slate-950 px-4 py-3 text-sm font-bold text-white" href="/login">
+            Go to admin login
+          </Link>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#f6f7f4] text-slate-950">
@@ -2752,6 +2873,7 @@ export default function AdminPanel({
               <div>
                 <p className="text-sm font-semibold text-emerald-700">Crosstrain Admin panel</p>
                 <h1 className="mt-1 text-3xl font-black tracking-normal sm:text-4xl">{pageTitle}</h1>
+                <p className="mt-1 text-sm font-medium text-slate-500">Signed in as {adminName}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -2775,6 +2897,9 @@ export default function AdminPanel({
                 type="button"
               >
                 Reset demo
+              </button>
+              <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={logoutAdmin} type="button">
+                Logout
               </button>
             </div>
           </header>

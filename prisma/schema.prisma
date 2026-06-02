@@ -1,0 +1,419 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  TRAINER
+  FRONT_DESK
+}
+
+enum BranchStatus {
+  ACTIVE
+  LAUNCHING
+  CLOSED
+}
+
+enum MemberStatus {
+  ACTIVE
+  DUE
+  PAUSED
+  LEAD
+  CANCELLED
+}
+
+enum PlanCategory {
+  REGULAR
+  THREE_DAYS_A_WEEK
+  TWO_DAYS_A_WEEK
+  PERSONAL_TRAINING
+}
+
+enum PlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum InvoiceStatus {
+  PAID
+  DUE
+  DRAFT
+  VOID
+}
+
+enum PaymentMode {
+  CASH
+  GOOGLE_PAY_SCREENSHOT
+  RAZORPAY
+  BANK_TRANSFER
+}
+
+enum LeadStage {
+  NEW
+  FOLLOW_UP
+  TRIAL_BOOKED
+  WON
+  LOST
+}
+
+enum AttendanceSource {
+  QR
+  FRONT_DESK
+  MANUAL
+}
+
+enum Sex {
+  MALE
+  FEMALE
+}
+
+enum FormReviewStatus {
+  CLEAR
+  REVIEW
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         UserRole  @default(FRONT_DESK)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  branchId     String?
+  branch       Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  staff        Staff?
+  sessions     Session[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([branchId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Branch {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  area        String
+  city        String
+  address     String
+  phone       String
+  email       String
+  status      BranchStatus @default(ACTIVE)
+  users       User[]
+  members     Member[]
+  staff       Staff[]
+  classes     ClassSlot[]
+  attendances Attendance[]
+  leads       Lead[]
+  invoices    Invoice[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Member {
+  id                  String                @id @default(cuid())
+  memberCode          String                @unique
+  name                String
+  phone               String                @unique
+  email               String?               @unique
+  passwordHash        String?
+  status              MemberStatus          @default(ACTIVE)
+  branchId            String
+  branch              Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  trainerId           String?
+  trainer             Staff?                @relation("TrainerMembers", fields: [trainerId], references: [id], onDelete: SetNull)
+  memberships         MemberMembership[]
+  attendances         Attendance[]
+  bookings            Booking[]
+  invoices            Invoice[]
+  payments            Payment[]
+  dietPlans           DietPlan[]
+  ptPackages          PtPackage[]
+  bodyMeasurements    BodyMeasurement[]
+  parqForms           ParqForm[]
+  medicalHistoryForms MedicalHistoryForm[]
+  emergencyName       String?
+  emergencyPhone      String?
+  joinedAt            DateTime              @default(now())
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([branchId])
+  @@index([trainerId])
+  @@index([status])
+}
+
+model MembershipPlan {
+  id           String             @id @default(cuid())
+  code         String             @unique
+  name         String
+  category     PlanCategory
+  durationDays Int
+  priceInr     Int
+  status       PlanStatus         @default(ACTIVE)
+  assignments  MemberMembership[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([category])
+  @@index([status])
+}
+
+model MemberMembership {
+  id        String         @id @default(cuid())
+  memberId  String
+  member    Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      MembershipPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  startsAt  DateTime
+  expiresAt DateTime
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([memberId])
+  @@index([planId])
+  @@index([expiresAt])
+}
+
+model Staff {
+  id          String      @id @default(cuid())
+  staffCode   String      @unique
+  name        String
+  phone       String?
+  role        UserRole
+  disciplines String[]
+  access      String[]
+  attendance  Int         @default(0)
+  performance String?
+  bio         String?
+  branchId    String
+  branch      Branch      @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  userId      String?     @unique
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  members     Member[]    @relation("TrainerMembers")
+  classes     ClassSlot[]
+  ptPackages  PtPackage[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([branchId])
+  @@index([role])
+}
+
+model ClassSlot {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  dayOfWeek Int
+  name      String
+  timeLabel String
+  capacity  Int
+  booked    Int       @default(0)
+  branchId  String
+  branch    Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  coachId   String?
+  coach     Staff?    @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  bookings  Booking[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([branchId])
+  @@index([coachId])
+  @@index([dayOfWeek])
+}
+
+model Booking {
+  id          String    @id @default(cuid())
+  classId     String
+  class       ClassSlot @relation(fields: [classId], references: [id], onDelete: Cascade)
+  memberId    String?
+  member      Member?   @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  guestName   String?
+  bookedAt    DateTime  @default(now())
+  cancelledAt DateTime?
+
+  @@index([classId])
+  @@index([memberId])
+}
+
+model Attendance {
+  id          String           @id @default(cuid())
+  memberId    String
+  member      Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  branchId    String
+  branch      Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  source      AttendanceSource @default(QR)
+  checkedInAt DateTime         @default(now())
+
+  @@index([memberId])
+  @@index([branchId])
+  @@index([checkedInAt])
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  invoiceCode String        @unique
+  memberId    String
+  member      Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  branchId    String
+  branch      Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  amountInr   Int
+  gstInr      Int           @default(0)
+  status      InvoiceStatus @default(DRAFT)
+  issuedOn    DateTime      @default(now())
+  dueOn       DateTime?
+  payments    Payment[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([memberId])
+  @@index([branchId])
+  @@index([status])
+}
+
+model Payment {
+  id          String      @id @default(cuid())
+  paymentCode String      @unique
+  memberId    String
+  member      Member      @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  invoiceId   String?
+  invoice     Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  amountInr   Int
+  mode        PaymentMode
+  reference   String?
+  paidAt      DateTime    @default(now())
+  createdAt   DateTime    @default(now())
+
+  @@index([memberId])
+  @@index([invoiceId])
+}
+
+model Lead {
+  id           String    @id @default(cuid())
+  leadCode     String    @unique
+  name         String
+  phone        String?
+  source       String
+  stage        LeadStage @default(NEW)
+  nextFollowUp DateTime?
+  notes        String?
+  branchId     String
+  branch       Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([branchId])
+  @@index([stage])
+  @@index([nextFollowUp])
+}
+
+model DietPlan {
+  id           String   @id @default(cuid())
+  memberId     String
+  member       Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  calories     Int
+  proteinGrams Int
+  workoutSplit String
+  adherence    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([memberId])
+}
+
+model PtPackage {
+  id            String   @id @default(cuid())
+  packageCode   String   @unique
+  memberId      String
+  member        Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  trainerId     String
+  trainer       Staff    @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  sessionsTotal Int
+  sessionsLeft  Int
+  progress      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([memberId])
+  @@index([trainerId])
+}
+
+model BodyMeasurement {
+  id             String   @id @default(cuid())
+  measurementCode String @unique
+  memberId       String
+  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  recordedOn     DateTime
+  heightCm       Int
+  weightKg       Float
+  age            Int
+  sex            Sex
+  chestCm        Int
+  waistCm        Int
+  hipCm          Int
+  bodyFatPercent Int
+  bmi            Float
+  bmr            Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([memberId])
+  @@index([recordedOn])
+}
+
+model ParqForm {
+  id           String           @id @default(cuid())
+  formCode     String           @unique
+  memberId     String
+  member       Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  submittedOn  DateTime
+  status       FormReviewStatus @default(CLEAR)
+  yesAnswers   String[]
+  notes        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([memberId])
+  @@index([submittedOn])
+  @@index([status])
+}
+
+model MedicalHistoryForm {
+  id               String           @id @default(cuid())
+  formCode         String           @unique
+  memberId         String
+  member           Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  submittedOn      DateTime
+  status           FormReviewStatus @default(CLEAR)
+  conditions       String[]
+  allergies        String
+  medications      String
+  emergencyContact String
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([memberId])
+  @@index([submittedOn])
+  @@index([status])
+}

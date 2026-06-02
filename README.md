@@ -20,6 +20,28 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## WhatsApp Reminders
+
+The `/whatsapp-reminders` admin page can manually trigger membership expiry reminders through the WhatsApp Cloud API.
+
+Create a local `.env.local` from `.env.example` and set:
+
+```bash
+META_TOKEN="your-meta-access-token"
+WHATSAPP_BUSINESS_PHONE_NUMBER_ID="your-phone-number-id"
+WHATSAPP_BUSINESS_ACCOUNT_ID="your-whatsapp-business-account-id"
+WHATSAPP_API_VERSION="v25.0"
+```
+
+By default, the manual trigger sends free-form text. To use an approved Meta template instead, set:
+
+```bash
+WHATSAPP_REMINDER_TEMPLATE_NAME="your_template_name"
+WHATSAPP_TEMPLATE_LANGUAGE="en_US"
+```
+
+WhatsApp sending requires a server runtime because the access token is used by an App Router API route. It will work with `next dev`, `next start`, Vercel, or another server host, but not with static export/GitHub Pages.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

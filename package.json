@@ -6,15 +6,23 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:setup": "prisma db push && prisma db seed",
+    "prisma:seed": "prisma db seed"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "@types/qrcode": "^1.5.6",
+    "dotenv": "^17.4.2",
     "html5-qrcode": "^2.3.8",
     "next": "16.2.4",
+    "prisma": "^6.19.3",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tsx": "^4.22.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
