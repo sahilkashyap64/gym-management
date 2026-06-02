@@ -43,6 +43,11 @@ function formatLogTime(value: string) {
   }).format(new Date(value));
 }
 
+type CheckInResponse = {
+  attendance?: DashboardSnapshot["attendanceLogs"][number];
+  error?: string;
+};
+
 export default function MemberAttendanceClient({ initialSnapshot }: { initialSnapshot: DashboardSnapshot }) {
   const router = useRouter();
   const scannerRef = useRef<ScannerInstance | null>(null);
@@ -136,7 +141,7 @@ export default function MemberAttendanceClient({ initialSnapshot }: { initialSna
     }
   }
 
-  function handleScan(decodedText: string) {
+  async function handleScan(decodedText: string) {
     if (!member || !session) {
       setMessage({ tone: "error", text: "Please log in again before scanning." });
       return;
@@ -170,15 +175,31 @@ export default function MemberAttendanceClient({ initialSnapshot }: { initialSna
       return;
     }
 
-    const now = new Date();
-    const log = {
-      id: `ATT-${now.getTime()}`,
-      memberId: member.id,
-      memberName: member.name,
-      branch: payload.branch,
-      checkedInAt: now.toISOString(),
-      source: "member-qr" as const,
-    };
+    setMessage({ tone: "idle", text: "Saving attendance..." });
+
+    let savedLog: DashboardSnapshot["attendanceLogs"][number];
+    try {
+      const response = await fetch("/api/attendance/check-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memberId: member.id,
+          branch: payload.branch,
+          date: payload.date,
+        }),
+      });
+      const result = (await response.json()) as CheckInResponse;
+
+      if (!response.ok || !result.attendance) {
+        setMessage({ tone: "error", text: result.error ?? "Attendance could not be saved. Please try again." });
+        return;
+      }
+
+      savedLog = result.attendance;
+    } catch {
+      setMessage({ tone: "error", text: "Attendance could not be saved. Check the connection and try again." });
+      return;
+    }
 
     const nextSnapshot: DashboardSnapshot = {
       ...snapshot,
@@ -188,10 +209,10 @@ export default function MemberAttendanceClient({ initialSnapshot }: { initialSna
       },
       members: snapshot.members.map((item) =>
         item.id === member.id
-          ? { ...item, lastCheckIn: `Today, ${formatCheckInTime(now).split(", ").at(-1) ?? "now"}` }
+          ? { ...item, lastCheckIn: `Today, ${formatCheckInTime(new Date(savedLog.checkedInAt)).split(", ").at(-1) ?? "now"}` }
           : item,
       ),
-      attendanceLogs: [log, ...snapshot.attendanceLogs],
+      attendanceLogs: [savedLog, ...snapshot.attendanceLogs],
     };
 
     saveDemoSnapshot(nextSnapshot);
