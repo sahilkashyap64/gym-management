@@ -27,11 +27,13 @@ type WhatsAppApiError = {
 function getMetaConfig() {
   return {
     token: process.env.META_TOKEN ?? process.env.WHATSAPP_META_TOKEN,
+    testPhoneNumber: process.env.WHATSAPP_TEST_PHONE_NUMBER,
     phoneNumberId: process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID,
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,
     apiVersion: process.env.WHATSAPP_API_VERSION ?? "v25.0",
     templateName: process.env.WHATSAPP_REMINDER_TEMPLATE_NAME,
     templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? "en_US",
+    templateBodyParamFields: process.env.WHATSAPP_TEMPLATE_BODY_PARAM_FIELDS ?? "memberName,memberId,expiry",
   };
 }
 
@@ -40,12 +42,14 @@ function getConfigStatus() {
   return {
     configured: Boolean(config.token && config.phoneNumberId),
     hasToken: Boolean(config.token),
+    testPhoneNumber: config.testPhoneNumber ?? null,
     hasPhoneNumberId: Boolean(config.phoneNumberId),
     hasBusinessAccountId: Boolean(config.businessAccountId),
     apiVersion: config.apiVersion,
     sendMode: config.templateName ? "template" : "text",
     templateName: config.templateName ?? null,
     templateLanguage: config.templateLanguage,
+    templateBodyParamFields: config.templateBodyParamFields,
   };
 }
 
@@ -61,8 +65,33 @@ function isValidReminder(value: Partial<MembershipReminder> | null): value is Me
   return Boolean(value.memberId && value.memberName && value.phone && value.message && /^\d{8,15}$/.test(value.phone));
 }
 
+function getTemplateParameterValue(reminder: MembershipReminder, field: string) {
+  const values: Record<string, string | number> = {
+    memberId: reminder.memberId,
+    memberName: reminder.memberName,
+    phone: reminder.phone,
+    plan: reminder.plan,
+    expiry: reminder.expiry,
+    daysUntilExpiry: reminder.daysUntilExpiry,
+    message: reminder.message,
+  };
+  return String(values[field] ?? field);
+}
+
+function getTemplateBodyParameters(reminder: MembershipReminder, config: ReturnType<typeof getMetaConfig>) {
+  return config.templateBodyParamFields
+    .split(",")
+    .map((field) => field.trim())
+    .filter(Boolean)
+    .map((field) => ({
+      type: "text",
+      text: getTemplateParameterValue(reminder, field),
+    }));
+}
+
 function buildMessagePayload(reminder: MembershipReminder, config: ReturnType<typeof getMetaConfig>) {
   if (config.templateName) {
+    const parameters = getTemplateBodyParameters(reminder, config);
     return {
       messaging_product: "whatsapp",
       to: reminder.phone,
@@ -70,6 +99,16 @@ function buildMessagePayload(reminder: MembershipReminder, config: ReturnType<ty
       template: {
         name: config.templateName,
         language: { code: config.templateLanguage },
+        ...(parameters.length
+          ? {
+              components: [
+                {
+                  type: "body",
+                  parameters,
+                },
+              ],
+            }
+          : {}),
       },
     };
   }

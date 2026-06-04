@@ -58,12 +58,14 @@ type ReminderResult = {
 type WhatsAppConfigStatus = {
   configured: boolean;
   hasToken: boolean;
+  testPhoneNumber: string | null;
   hasPhoneNumberId: boolean;
   hasBusinessAccountId: boolean;
   apiVersion: string;
   sendMode: "template" | "text";
   templateName: string | null;
   templateLanguage: string;
+  templateBodyParamFields: string;
 };
 type ActiveModal =
   | "member"
@@ -1963,12 +1965,20 @@ export default function AdminPanel({
                 {whatsAppConfigStatus?.hasPhoneNumberId ? "configured" : "missing"}
               </p>
               <p>
+                <span className="font-bold text-slate-900">Test number:</span>{" "}
+                {whatsAppConfigStatus?.testPhoneNumber ?? "not configured"}
+              </p>
+              <p>
                 <span className="font-bold text-slate-900">Access token:</span>{" "}
                 {whatsAppConfigStatus?.hasToken ? "configured" : "missing"}
               </p>
               <p>
                 <span className="font-bold text-slate-900">Template:</span>{" "}
                 {whatsAppConfigStatus?.templateName ?? "not configured"}
+              </p>
+              <p className="sm:col-span-2">
+                <span className="font-bold text-slate-900">Template params:</span>{" "}
+                {whatsAppConfigStatus?.templateBodyParamFields ?? "memberName,memberId,expiry"}
               </p>
             </div>
           </div>
