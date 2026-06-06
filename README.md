@@ -31,6 +31,7 @@ META_TOKEN="your-meta-access-token"
 WHATSAPP_BUSINESS_PHONE_NUMBER_ID="your-phone-number-id"
 WHATSAPP_BUSINESS_ACCOUNT_ID="your-whatsapp-business-account-id"
 WHATSAPP_API_VERSION="v25.0"
+WHATSAPP_WEBHOOK_VERIFY_TOKEN="your-random-webhook-verify-token"
 ```
 
 By default, the manual trigger sends free-form text. To use an approved Meta template instead, set:
@@ -38,6 +39,14 @@ By default, the manual trigger sends free-form text. To use an approved Meta tem
 ```bash
 WHATSAPP_REMINDER_TEMPLATE_NAME="your_template_name"
 WHATSAPP_TEMPLATE_LANGUAGE="en_US"
+WHATSAPP_TEMPLATE_BODY_PARAM_FIELDS="memberName,memberId,expiry"
+```
+
+For the hosted Vercel app, configure the same variables in Vercel Project Settings. In Meta's WhatsApp webhook setup, use:
+
+```txt
+Callback URL: https://gym-management-liard-seven.vercel.app/api/whatsapp/webhook
+Verify token: the same value as WHATSAPP_WEBHOOK_VERIFY_TOKEN
 ```
 
 WhatsApp sending requires a server runtime because the access token is used by an App Router API route. It will work with `next dev`, `next start`, Vercel, or another server host, but not with static export/GitHub Pages.
